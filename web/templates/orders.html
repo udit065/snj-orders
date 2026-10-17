@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Sales' if kind == 'sales' else 'Purchase' }} orders · SNJ Orders{% endblock %}
+{% block body %}
+<h1>{{ 'Sales' if kind == 'sales' else 'Purchase' }} orders</h1>
+<form class="filters" method="get">
+  <input name="q" value="{{ q }}" placeholder="Search {{ 'customer' if kind == 'sales' else 'supplier' }}, order no. or item">
+  <select name="status">
+    {% for v, label in [('open','Not completed (' ~ (counts.pending + counts.partly) ~ ')'), ('pending','Pending (' ~ counts.pending ~ ')'), ('partly','Partly done (' ~ counts.partly ~ ')'), ('done','Completed (' ~ counts.done ~ ')'), ('all','All')] %}
+    <option value="{{ v }}" {{ 'selected' if status == v }}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <label class="d">From <input type="date" name="date_from" value="{{ date_from }}"></label>
+  <label class="d">To <input type="date" name="date_to" value="{{ date_to }}"></label>
+  <button>Show</button>
+</form>
+{% if not orders %}
+<p class="muted">No orders match.</p>
+{% else %}
+<table class="list">
+<thead><tr><th>Date</th><th>Order no.</th><th>{{ 'Customer' if kind == 'sales' else 'Supplier' }}</th><th class="n">Items</th><th class="n">Amount ₹</th><th>Next due</th><th>Status</th></tr></thead>
+<tbody>
+{% for o in orders %}
+<tr onclick="location.href='/order/{{ o.guid | urlencode }}'">
+  <td data-l="Date">{{ o.date | nice_date }}</td>
+  <td data-l="Order no."><a href="/order/{{ o.guid | urlencode }}">{{ o.number }}</a>{% if o.optional %} <span class="tag">optional</span>{% endif %}</td>
+  <td data-l="Party">{{ o.party }}</td>
+  <td data-l="Items" class="n">{{ o['items'] }}</td>
+  <td data-l="Amount ₹" class="n">{{ o.total | inr }}</td>
+  <td data-l="Next due" class="{{ 'late' if o.overdue }}">{{ o.next_due | nice_date }}</td>
+  <td data-l="Status"><span class="st {{ o.status }}">{{ o.status_label }}</span></td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+{% endif %}
+{% endblock %}

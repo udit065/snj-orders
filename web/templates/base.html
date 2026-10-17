@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}SNJ Orders{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+{% if user %}
+<header class="top">
+  <a class="brand" href="/">SNJ Orders</a>
+  <nav>
+    <a href="/orders/sales" class="{{ 'on' if kind == 'sales' }}">Sales orders</a>
+    <a href="/orders/purchase" class="{{ 'on' if kind == 'purchase' }}">Purchase orders</a>
+  </nav>
+  <div class="who">{{ user.name }} · <a href="/logout">Sign out</a></div>
+</header>
+<div class="fresh">Copied from Tally: {{ synced_at }} · view only, changes are made in Tally</div>
+{% endif %}
+<main>{% block body %}{% endblock %}</main>
+</body>
+</html>

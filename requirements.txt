@@ -1,0 +1,6 @@
+# Website only. The bridge uses nothing beyond standard Python.
+fastapi==0.143.3
+uvicorn==0.53.0
+jinja2==3.1.6
+python-multipart==0.0.32
+itsdangerous==2.2.0

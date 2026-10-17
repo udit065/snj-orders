@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block body %}
+<form class="login" method="post" action="/login">
+  <h1>SNJ Orders</h1>
+  <p class="muted">Sales and purchase orders from Tally</p>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <label>Username <input name="username" autocomplete="username" required autofocus></label>
+  <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+  <button>Sign in</button>
+</form>
+{% endblock %}
