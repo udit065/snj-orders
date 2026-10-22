@@ -39,10 +39,12 @@ def load_config(path):
         "chunk_days": s.getint("chunk_days", 7),
         "timeout": s.getint("timeout", 300),
         "every_minutes": s.getint("every_minutes", 15),
+        "quick_days_back": s.getint("quick_days_back", 10),
+        "full_sync_hour": s.getint("full_sync_hour", 2),
     }
 
 
-def read_tally(cfg):
+def read_tally(cfg, start, end):
     try:
         base = tally.resolve_base_types(
             tally.post(cfg["tally_url"], tally.voucher_types_request(cfg["company"]), cfg["timeout"]))
@@ -56,9 +58,6 @@ def read_tally(cfg):
     wanted = {n for n, b in base.items() if b in tally.ORDER_BASES | tally.FULFIL_BASES}
 
     # Ask for a week at a time, as large requests can time out on a busy Tally.
-    today = dt.date.today()
-    start = today - dt.timedelta(days=cfg["days_back"])
-    end = today + dt.timedelta(days=cfg["days_ahead"])
     orders, fulfilments = [], []
     variants = list(tally.FETCH_VARIANTS)
     while start <= end:
@@ -79,9 +78,20 @@ def read_tally(cfg):
     return orders, fulfilments
 
 
-def send(cfg, orders, fulfilments):
+def window(cfg, full):
+    """Full sync: the whole period the website shows. Quick sync: just the last few days,
+    which is where new orders, edits and deliveries against any order land."""
+    today = dt.date.today()
+    back = cfg["days_back"] if full else cfg["quick_days_back"]
+    return today - dt.timedelta(days=back), today + dt.timedelta(days=cfg["days_ahead"])
+
+
+def send(cfg, orders, fulfilments, start, end, full):
     payload = json.dumps({
         "synced_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "full": full,
+        "from": start.isoformat(),
+        "to": end.isoformat(),
         "orders": orders,
         "fulfilments": fulfilments,
     }).encode("utf-8")
@@ -90,25 +100,28 @@ def send(cfg, orders, fulfilments):
         data=payload,
         headers={"Content-Type": "application/json", "Authorization": f'Bearer {cfg["token"]}'},
     )
-    with urllib.request.urlopen(req, timeout=120) as resp:
+    with urllib.request.urlopen(req, timeout=300) as resp:
         return json.loads(resp.read())
 
 
-def sync_once(cfg, dry_run=False):
-    orders, fulfilments = read_tally(cfg)
+def sync_once(cfg, full=True, dry_run=False):
+    started = time.monotonic()
+    start, end = window(cfg, full)
+    orders, fulfilments = read_tally(cfg, start, end)
     sales = sum(1 for o in orders if o["kind"] == "sales")
-    log.info("Read %d sales orders, %d purchase orders, %d delivery lines from Tally",
-             sales, len(orders) - sales, len(fulfilments))
+    log.info("%s sync %s..%s: read %d sales orders, %d purchase orders, %d delivery lines in %.0f s",
+             "Full" if full else "Quick", start, end, sales, len(orders) - sales, len(fulfilments),
+             time.monotonic() - started)
     if dry_run:
         for o in orders[:3]:
             sizes = len(o["lines"])
             print(f'{o["date"]}  {o["voucher_type"]} {o["number"]}  {o["party"]}  Rs {o["total"]:,.2f}  ({sizes} item/size lines)')
         return
-    if not orders:
+    if not orders and (full or not fulfilments):
         # Never wipe the website because of one empty read (Tally busy, wrong company...).
-        log.warning("Tally returned no orders, so the website was left unchanged")
+        log.warning("Tally returned nothing, so the website was left unchanged")
         return
-    result = send(cfg, orders, fulfilments)
+    result = send(cfg, orders, fulfilments, start, end, full)
     log.info("Website accepted: %s", result)
 
 
@@ -117,6 +130,7 @@ def main():
     ap.add_argument("--config", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.ini"))
     ap.add_argument("--once", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--quick", action="store_true", help="with --once/--dry-run: only the last few days")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     cfg = load_config(args.config)
@@ -125,13 +139,20 @@ def main():
 
     if args.once or args.dry_run:
         try:
-            sync_once(cfg, args.dry_run)
+            sync_once(cfg, full=not args.quick, dry_run=args.dry_run)
         except tally.TallyError as e:
             sys.exit(f"Problem: {e}")
         return
+    # A full read of SNJ's books takes ~12 minutes, so it runs once at start and then
+    # nightly; in between, quick syncs pick up the last few days.
+    last_full = None
     while True:
+        now = dt.datetime.now()
+        full = last_full is None or (now.date() > last_full and now.hour >= cfg["full_sync_hour"])
         try:
-            sync_once(cfg)
+            sync_once(cfg, full=full)
+            if full:
+                last_full = now.date()
         except Exception as e:  # keep running; Tally may just be closed for a moment
             log.error("Sync failed: %s", e)
         time.sleep(cfg["every_minutes"] * 60)

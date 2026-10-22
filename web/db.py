@@ -10,8 +10,9 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS orders (
     guid TEXT PRIMARY KEY, kind TEXT NOT NULL, number TEXT, date TEXT, party TEXT,
     voucher_type TEXT, reference TEXT, narration TEXT, total REAL, optional INTEGER,
-    master_id TEXT, alter_id TEXT
+    master_id TEXT, alter_id TEXT, cancelled INTEGER DEFAULT 0
 );
+CREATE INDEX IF NOT EXISTS orders_date ON orders(date);
 CREATE TABLE IF NOT EXISTS order_lines (
     order_guid TEXT NOT NULL, idx INTEGER, item TEXT, size TEXT, qty REAL, unit TEXT, rate REAL,
     amount REAL, due_date TEXT, godown TEXT, order_no TEXT
@@ -21,6 +22,7 @@ CREATE TABLE IF NOT EXISTS fulfilments (
     kind TEXT, party TEXT, order_no TEXT, item TEXT, size TEXT, qty REAL, date TEXT, voucher TEXT
 );
 CREATE INDEX IF NOT EXISTS fulfilments_key ON fulfilments(kind, party, order_no, item, size);
+CREATE INDEX IF NOT EXISTS fulfilments_date ON fulfilments(date);
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE IF NOT EXISTS users (
     username TEXT PRIMARY KEY, name TEXT, pw_hash TEXT NOT NULL, active INTEGER DEFAULT 1
@@ -44,18 +46,30 @@ def init():
         c.executescript(SCHEMA)
 
 
-def replace_all(orders, fulfilments, synced_at):
-    """Swap in a fresh snapshot from Tally in one transaction."""
+def replace_all(orders, fulfilments, synced_at, date_from=None, date_to=None):
+    """Swap in a fresh copy from Tally in one transaction.
+
+    With dates, only that period is replaced (a quick sync); everything is replaced otherwise.
+    """
     with connect() as c:
-        c.execute("DELETE FROM orders")
-        c.execute("DELETE FROM order_lines")
-        c.execute("DELETE FROM fulfilments")
+        if date_from:
+            c.execute("DELETE FROM order_lines WHERE order_guid IN "
+                      "(SELECT guid FROM orders WHERE date BETWEEN ? AND ?)", (date_from, date_to))
+            c.execute("DELETE FROM orders WHERE date BETWEEN ? AND ?", (date_from, date_to))
+            c.execute("DELETE FROM fulfilments WHERE date BETWEEN ? AND ?", (date_from, date_to))
+        else:
+            c.execute("DELETE FROM orders")
+            c.execute("DELETE FROM order_lines")
+            c.execute("DELETE FROM fulfilments")
         for o in orders:
+            # An order whose date was moved into this period replaces its old copy.
+            c.execute("DELETE FROM order_lines WHERE order_guid=?", (o["guid"],))
             c.execute(
-                "INSERT OR REPLACE INTO orders VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT OR REPLACE INTO orders VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (o["guid"], o["kind"], o["number"], o["date"], o["party"], o["voucher_type"],
                  o.get("reference", ""), o.get("narration", ""), o.get("total", 0),
-                 int(o.get("optional", False)), o.get("master_id", ""), o.get("alter_id", "")),
+                 int(o.get("optional", False)), o.get("master_id", ""), o.get("alter_id", ""),
+                 int(o.get("cancelled", False))),
             )
             c.executemany(
                 "INSERT INTO order_lines VALUES (?,?,?,?,?,?,?,?,?,?,?)",
@@ -69,6 +83,8 @@ def replace_all(orders, fulfilments, synced_at):
              for f in fulfilments],
         )
         c.execute("INSERT OR REPLACE INTO meta VALUES ('synced_at', ?)", (synced_at,))
+        if not date_from:
+            c.execute("INSERT OR REPLACE INTO meta VALUES ('full_synced_at', ?)", (synced_at,))
 
 
 def last_synced():

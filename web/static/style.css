@@ -47,3 +47,4 @@ table.list { width:100%; border-collapse:collapse; background:var(--card); borde
   .sizes tr.size td:first-child { padding-left:10px; }
 }
 .list td[data-l="Date"], .list td[data-l="Next due"], .list td[data-l="Due"] { white-space:nowrap; }
+.st.cancelled { background:#eef1f5; color:var(--muted); text-decoration:line-through; }

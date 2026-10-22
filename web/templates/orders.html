@@ -5,7 +5,7 @@
 <form class="filters" method="get">
   <input name="q" value="{{ q }}" placeholder="Search {{ 'customer' if kind == 'sales' else 'supplier' }}, order no. or item">
   <select name="status">
-    {% for v, label in [('open','Not completed (' ~ (counts.pending + counts.partly) ~ ')'), ('pending','Pending (' ~ counts.pending ~ ')'), ('partly','Partly done (' ~ counts.partly ~ ')'), ('done','Completed (' ~ counts.done ~ ')'), ('all','All')] %}
+    {% for v, label in [('open','Not completed (' ~ (counts.pending + counts.partly) ~ ')'), ('pending','Pending (' ~ counts.pending ~ ')'), ('partly','Partly done (' ~ counts.partly ~ ')'), ('done','Completed (' ~ counts.done ~ ')'), ('cancelled','Cancelled (' ~ counts.cancelled ~ ')'), ('all','All')] %}
     <option value="{{ v }}" {{ 'selected' if status == v }}>{{ label }}</option>
     {% endfor %}
   </select>

@@ -103,7 +103,7 @@ def status_of(lines):
     return "partly" if sent > 0 else "pending"
 
 
-STATUS_LABEL = {"pending": "Pending", "partly": "Partly done", "done": "Completed"}
+STATUS_LABEL = {"pending": "Pending", "partly": "Partly done", "done": "Completed", "cancelled": "Cancelled"}
 
 
 # --- pages -------------------------------------------------------------------
@@ -155,18 +155,19 @@ def order_list(request: Request, kind: str, q: str = "", status: str = "open",
     with db.connect() as c:
         orders = [dict(o) for o in c.execute(sql, args).fetchall()]
         progress = with_progress(c, [o["guid"] for o in orders])
-    rows, counts = [], {"pending": 0, "partly": 0, "done": 0}
+    rows, counts = [], {"pending": 0, "partly": 0, "done": 0, "cancelled": 0}
     today = date.today().isoformat()
     for o in orders:
         lines = progress.get(o["guid"], [])
-        o["status"] = status_of(lines)
+        o["status"] = "cancelled" if o["cancelled"] else status_of(lines)
         counts[o["status"]] += 1
         o["status_label"] = STATUS_LABEL[o["status"]]
         o["items"] = len({l["item"] for l in lines})
         dues = [l["due_date"] for l in lines if l["due_date"] and l["left"] > 0]
         o["next_due"] = min(dues) if dues else ""
-        o["overdue"] = bool(o["next_due"] and o["next_due"] < today)
-        if status == "all" or (status == "open" and o["status"] != "done") or status == o["status"]:
+        o["overdue"] = bool(o["next_due"] and o["next_due"] < today and o["status"] != "cancelled")
+        if (status == "all" or status == o["status"]
+                or (status == "open" and o["status"] in ("pending", "partly"))):
             rows.append(o)
     return render(request, "orders.html", kind=kind, orders=rows, counts=counts, q=q, status=status,
                   date_from=date_from, date_to=date_to)
@@ -187,7 +188,7 @@ def order_detail(request: Request, guid: str):
             f"SELECT * FROM fulfilments WHERE kind=? AND party=? AND order_no IN ({marks}) "
             "ORDER BY date, voucher, item, size",
             [order["kind"], order["party"], *order_nos]).fetchall()
-    order["status"] = status_of(lines)
+    order["status"] = "cancelled" if order["cancelled"] else status_of(lines)
     order["status_label"] = STATUS_LABEL[order["status"]]
     return render(request, "order.html", order=order, items=group_by_item(lines), history=history)
 
@@ -212,7 +213,10 @@ async def sync(request: Request):
     if not BRIDGE_TOKEN or not hmac.compare_digest(auth, f"Bearer {BRIDGE_TOKEN}"):
         raise HTTPException(401, "Bad bridge token")
     data = await request.json()
-    db.replace_all(data["orders"], data["fulfilments"], data["synced_at"])
+    if data.get("full", True):
+        db.replace_all(data["orders"], data["fulfilments"], data["synced_at"])
+    else:
+        db.replace_all(data["orders"], data["fulfilments"], data["synced_at"], data["from"], data["to"])
     return {"orders": len(data["orders"]), "fulfilments": len(data["fulfilments"])}
 
 

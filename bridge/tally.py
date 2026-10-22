@@ -242,6 +242,8 @@ def parse_vouchers(root, base_types):
             for l in lines:
                 l["order_no"] = l["order_no"] or record["number"]
             record["optional"] = _text(v, "ISOPTIONAL") == "Yes"
+            # SNJ cancels an order by renaming it, e.g. "SO/D5/123 R(CANCEL)".
+            record["cancelled"] = "CANCEL" in record["number"].upper()
             record["total"] = round(sum(l["amount"] for l in lines), 2)
             record["lines"] = lines
             orders.append(record)

@@ -35,17 +35,28 @@ def client(tmp_path, monkeypatch):
     return TestClient(webapp.app)
 
 
-def read(tally_url):
+import datetime as dt  # noqa: E402
+
+CFG = {"company": "SN JAIN INDUSTRIES PVT LTD - (26-27)", "timeout": 30, "chunk_days": 7}
+
+
+def read(tally_url, start=dt.date(2026, 9, 1), end=dt.date(2026, 11, 30)):
     import bridge
-    cfg = {"tally_url": tally_url, "company": "SN JAIN INDUSTRIES PVT LTD - (26-27)", "timeout": 30,
-           "days_back": 1500, "days_ahead": 400, "chunk_days": 60}
-    return bridge.read_tally(cfg)
+    return bridge.read_tally({**CFG, "tally_url": tally_url}, start, end)
+
+
+def post_sync(client, start, end, full, tally_url, synced_at="2026-10-17T10:42:00+05:30"):
+    orders, fulfilments = read(tally_url, start, end)
+    payload = {"synced_at": synced_at, "full": full, "from": start.isoformat(), "to": end.isoformat(),
+               "orders": orders, "fulfilments": fulfilments}
+    return client.post("/api/sync", content=json.dumps(payload), headers={"Authorization": "Bearer secret-token"})
 
 
 def test_bridge_reads_orders_by_size_and_only_exports(tally_url):
     orders, fulfilments = read(tally_url)
     by_no = {o["number"]: o for o in orders}
-    assert sorted(by_no) == ["PO/0077", "SO/26-27/0412", "SO/26-27/0420"]  # cancelled one skipped, no repeats
+    assert sorted(by_no) == ["PO/0077", "SO/26-27/0412", "SO/26-27/0420", "SO/D5/123 R(CANCEL)"]  # no repeats
+    assert by_no["SO/D5/123 R(CANCEL)"]["cancelled"] and not by_no["SO/26-27/0412"]["cancelled"]
     so = by_no["SO/26-27/0412"]
     assert so["kind"] == "sales" and so["voucher_type"] == "SNJ Order"  # custom type resolved to Sales Order
     assert so["narration"] == "Urgent before Diwali"
@@ -68,7 +79,7 @@ def test_bridge_reads_orders_by_size_and_only_exports(tally_url):
 def test_bridge_falls_back_to_lean_fields(tally_url):
     fake_tally.REJECT_RICH = True
     orders, _ = read(tally_url)
-    assert len(orders) == 3
+    assert len(orders) == 4
     reqs = [r for r in fake_tally.REQUESTS if "SNJVouchers" in r]
     # Once the lean list has returned data, later weeks send one lean request each.
     last_rich = max(i for i, r in enumerate(reqs) if "Narration" in r)
@@ -77,17 +88,17 @@ def test_bridge_falls_back_to_lean_fields(tally_url):
 
 def test_empty_read_leaves_website_alone(tally_url, monkeypatch):
     import bridge
-    monkeypatch.setattr(bridge, "read_tally", lambda cfg: ([], []))
+    monkeypatch.setattr(bridge, "read_tally", lambda cfg, s, e: ([], []))
     monkeypatch.setattr(bridge, "send", lambda *a: pytest.fail("must not send an empty snapshot"))
-    bridge.sync_once({})
+    cfg = {"days_back": 120, "quick_days_back": 10, "days_ahead": 60}
+    bridge.sync_once(cfg, full=True)
+    bridge.sync_once(cfg, full=False)
 
 
 def test_website_shows_progress_by_size(tally_url, client):
-    orders, fulfilments = read(tally_url)
-    payload = {"synced_at": "2026-10-17T10:42:00+05:30", "orders": orders, "fulfilments": fulfilments}
-    assert client.post("/api/sync", content=json.dumps(payload)).status_code == 401
-    r = client.post("/api/sync", content=json.dumps(payload), headers={"Authorization": "Bearer secret-token"})
-    assert r.json() == {"orders": 3, "fulfilments": 4}
+    assert client.post("/api/sync", content="{}").status_code == 401
+    r = post_sync(client, dt.date(2026, 9, 1), dt.date(2026, 11, 30), True, tally_url)
+    assert r.json() == {"orders": 4, "fulfilments": 4}
 
     assert client.get("/orders/sales", follow_redirects=False).headers["location"] == "/login"
     assert "Wrong username" in client.post("/login", data={"username": "ramesh", "password": "nope"}).text
@@ -96,7 +107,8 @@ def test_website_shows_progress_by_size(tally_url, client):
     page = client.get("/orders/sales").text
     assert "Agarwal Hosiery" in page and "Mehta &amp; Sons" in page and "Partly done" in page
     assert "21,600.00" in page and "17 Oct, 10:42 AM" in page
-    assert "Tirupur" not in page
+    assert "Tirupur" not in page and "Dhanlaxmi" not in page  # cancelled hidden by default
+    assert "Dhanlaxmi" in client.get("/orders/sales?status=cancelled").text
 
     purchase_all = client.get("/orders/purchase?status=all").text
     assert "Completed" in purchase_all and "1,55,000.00" in purchase_all
@@ -111,3 +123,26 @@ def test_website_shows_progress_by_size(tally_url, client):
     import re
     cells = re.findall(r'data-l="Left" class="n ?(?:left)?">([\d.]+)<', detail)
     assert cells == ["2", "0", "2", "4", "4"]
+
+
+def test_quick_sync_replaces_only_recent_days(tally_url, client):
+    post_sync(client, dt.date(2026, 9, 1), dt.date(2026, 11, 30), True, tally_url)
+    client.post("/login", data={"username": "ramesh", "password": "password123"})
+    # Pretend Tally no longer has the 15 Oct order: a quick sync of 14-16 Oct drops it,
+    # and keeps everything outside that window, including the 12 Oct order's deliveries.
+    fake_tally.REQUESTS.clear()
+    import bridge
+    real = bridge.read_tally
+    def without_mehta(cfg, s, e):
+        o, f = real(cfg, s, e)
+        return [x for x in o if x["number"] != "SO/26-27/0420"], f
+    bridge.read_tally = without_mehta
+    try:
+        r = post_sync(client, dt.date(2026, 10, 14), dt.date(2026, 10, 16), False, tally_url,
+                      synced_at="2026-10-17T11:00:00+05:30")
+    finally:
+        bridge.read_tally = real
+    assert r.json() == {"orders": 0, "fulfilments": 4}
+    page = client.get("/orders/sales?status=all").text
+    assert "Mehta" not in page and "Agarwal" in page and "11:00 AM" in page
+    assert "GST Sales SNJ/26-27/2201" in client.get("/order/g-so-1").text

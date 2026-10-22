@@ -47,7 +47,16 @@ the same way. The two programs run side by side; this one never writes to Tally.
 5. Once the website is online, put its address and token in `config.ini` and run
    `python bridge.py --once`, then check the website.
 6. Keep it running: in Windows **Task Scheduler**, create a task "At startup" that runs
-   `python C:\snj-orders\bridge\bridge.py` (it syncs every 15 minutes by default).
+   `python C:\snj-orders\bridge\bridge.py`.
+
+Reading SNJ's full 6 months (2,300+ orders, 60,000 delivery lines) takes about 12 minutes,
+so the bridge does that once when it starts and once a night after `full_sync_hour`.
+Every 15 minutes in between it does a quick sync of only the last `quick_days_back` days
+(10 by default): new orders, edits and deliveries all land there. `--quick` with `--dry-run`
+or `--once` tries a quick sync by hand.
+
+Orders whose number contains "CANCEL" (SNJ's way of cancelling, e.g. `SO/D5/123 R(CANCEL)`)
+show as Cancelled and are hidden from the default list.
 
 The bridge asks Tally for one week at a time, and tries a smaller field list if
 Tally answers the full one with nothing (some TallyPrime builds do that). If a read
