@@ -4,6 +4,7 @@ Only "Export" requests are ever built here, so nothing in this module can
 create, change or delete anything in Tally.
 """
 
+import datetime as dt
 import re
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -17,18 +18,17 @@ SALES_SIDE = {"Sales Order", "Sales", "Delivery Note", "Rejections In"}
 
 # Tally puts control characters like &#4; in some text; strip anything XML can't hold.
 _BAD_CHARS = re.compile(r"&#(?:[0-8]|1[124-9]|2[0-9]|3[01]);")
+_PREFIXED_TAG = re.compile(r"<(/?)([A-Za-z_][\w.\-]*):")
 
 
 class TallyError(Exception):
     pass
 
 
-def _envelope(collection_id, tdl, from_date=None, to_date=None, company=None):
+def _envelope(collection_id, tdl, company=None):
     statics = "<SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>"
     if company:
         statics += f"<SVCURRENTCOMPANY>{escape(company)}</SVCURRENTCOMPANY>"
-    if from_date:
-        statics += f"<SVFROMDATE>{from_date:%Y%m%d}</SVFROMDATE><SVTODATE>{to_date:%Y%m%d}</SVTODATE>"
     return (
         "<ENVELOPE><HEADER><VERSION>1</VERSION><TALLYREQUEST>Export</TALLYREQUEST>"
         f"<TYPE>Collection</TYPE><ID>{collection_id}</ID></HEADER><BODY><DESC>"
@@ -46,20 +46,34 @@ def voucher_types_request(company=None):
     return _envelope("SNJVchTypes", tdl, company=company)
 
 
-def vouchers_request(type_names, from_date, to_date, company=None):
-    quoted = " OR ".join(f'$VoucherTypeName = "{escape(n)}"' for n in sorted(type_names))
+# On SNJ's TallyPrime 7 (Edit Log) a voucher collection answers with ZERO rows,
+# and no error, if a single FETCH field is unknown to the build. So the bridge
+# tries the rich field list first and falls back to the lean one.
+_INVENTORY_FIELDS = ("AllInventoryEntries.StockItemName, AllInventoryEntries.ActualQty,"
+                     " AllInventoryEntries.BilledQty, AllInventoryEntries.Rate,"
+                     " AllInventoryEntries.Amount, AllInventoryEntries.BatchAllocations")
+FETCH_VARIANTS = {
+    "rich": ("Guid, Date, VoucherTypeName, VoucherNumber, PartyLedgerName, Reference, Narration,"
+             " MasterID, AlterID, IsCancelled, IsOptional, " + _INVENTORY_FIELDS),
+    "lean": "Guid, Date, VoucherTypeName, VoucherNumber, PartyLedgerName, " + _INVENTORY_FIELDS,
+}
+# Used when Tally won't list voucher types: the built-in names.
+DEFAULT_TYPES = {n: n for n in ORDER_BASES | FULFIL_BASES}
+
+
+def vouchers_request(type_names, from_date, to_date, company=None, variant="rich"):
+    # A Collection has no report period, so SVFROMDATE/SVTODATE do nothing here;
+    # the date range has to be a filter formula.
+    types = " OR ".join(f'$VoucherTypeName = "{escape(n)}"' for n in sorted(type_names))
+    period = f'$Date &gt;= $$Date:"{from_date:%Y%m%d}" AND $Date &lt;= $$Date:"{to_date:%Y%m%d}"'
     tdl = (
         '<COLLECTION NAME="SNJVouchers" ISMODIFY="No">'
-        "<TYPE>Voucher</TYPE>"
-        "<FETCH>Date, VoucherNumber, VoucherTypeName, PartyLedgerName, Reference, Narration,"
-        " GUID, MasterID, AlterID, IsCancelled, IsOptional, IsDeleted,"
-        " AllInventoryEntries.StockItemName, AllInventoryEntries.ActualQty,"
-        " AllInventoryEntries.BilledQty, AllInventoryEntries.Rate,"
-        " AllInventoryEntries.Amount, AllInventoryEntries.BatchAllocations</FETCH>"
-        "<FILTER>SNJWanted</FILTER></COLLECTION>"
-        f'<SYSTEM TYPE="Formulae" NAME="SNJWanted">{quoted}</SYSTEM>'
+        f"<TYPE>Voucher</TYPE><FETCH>{FETCH_VARIANTS[variant]}</FETCH>"
+        "<FILTER>SNJPeriod,SNJTypes</FILTER></COLLECTION>"
+        f'<SYSTEM TYPE="Formulae" NAME="SNJPeriod">{period}</SYSTEM>'
+        f'<SYSTEM TYPE="Formulae" NAME="SNJTypes">{types}</SYSTEM>'
     )
-    return _envelope("SNJVouchers", tdl, from_date, to_date, company)
+    return _envelope("SNJVouchers", tdl, company)
 
 
 def post(url, body, timeout=120):
@@ -76,6 +90,13 @@ def post(url, body, timeout=120):
 
 def parse_xml(raw):
     raw = _BAD_CHARS.sub("", raw)
+    # User Defined Fields come as <UDF:NAME>, an undeclared XML prefix that
+    # ElementTree rejects; rename them to <UDF_NAME>.
+    while True:
+        fixed = _PREFIXED_TAG.sub(r"<\1\2_", raw)
+        if fixed == raw:
+            break
+        raw = fixed
     try:
         root = ET.fromstring(raw)
     except ET.ParseError as e:
@@ -131,7 +152,62 @@ def parse_rate(s):
 
 
 def _date(s):
-    return f"{s[:4]}-{s[4:6]}-{s[6:8]}" if len(s) == 8 else s
+    """Tally dates: '20261012', '12-Oct-26' or '12-Oct-2026' -> '2026-10-12'."""
+    s = (s or "").strip()
+    for fmt in ("%Y%m%d", "%d-%b-%y", "%d-%b-%Y"):
+        try:
+            return dt.datetime.strptime(s, fmt).date().isoformat()
+        except ValueError:
+            pass
+    return ""
+
+
+_DAYS = re.compile(r"^(\d+)\s*Days?$", re.I)
+
+
+def _due_date(s, voucher_date):
+    """Order due dates are a date, or 'N Days' counted from the order date."""
+    s = (s or "").strip()
+    m = _DAYS.match(s)
+    if m and voucher_date:
+        return (dt.date.fromisoformat(voucher_date) + dt.timedelta(days=int(m.group(1)))).isoformat()
+    return _date(s.split()[0] if s else "")
+
+
+# Batch names that mean "no batch" rather than a size.
+_NO_BATCH = {"", "primary batch", "any", "not applicable"}
+
+
+def _lines(v, vdate):
+    """One line per item and size. SNJ keeps sizes as Tally batches."""
+    lines = []
+    for inv in v.findall("ALLINVENTORYENTRIES.LIST"):
+        item = _text(inv, "STOCKITEMNAME")
+        if not item:
+            continue
+        qty, unit = parse_qty(_text(inv, "ACTUALQTY") or _text(inv, "BILLEDQTY"))
+        rate = parse_rate(_text(inv, "RATE"))
+        batches = [b for b in inv.findall("BATCHALLOCATIONS.LIST")
+                   if parse_qty(_text(b, "ACTUALQTY") or _text(b, "BILLEDQTY"))[0]]
+        if not batches:
+            lines.append({"item": item, "size": "", "qty": qty, "unit": unit, "rate": rate,
+                          "amount": parse_amount(_text(inv, "AMOUNT")), "due_date": "",
+                          "godown": "", "order_no": ""})
+            continue
+        for b in batches:
+            bqty, bunit = parse_qty(_text(b, "ACTUALQTY") or _text(b, "BILLEDQTY"))
+            size = _text(b, "BATCHNAME")
+            order_no = _text(b, "ORDERNO")
+            lines.append({
+                "item": item,
+                "size": "" if size.lower() in _NO_BATCH else size,
+                "qty": bqty, "unit": bunit or unit, "rate": rate,
+                "amount": parse_amount(_text(b, "AMOUNT")) or round(bqty * rate, 2),
+                "due_date": _due_date(_text(b, "ORDERDUEDATE"), vdate),
+                "godown": "" if _text(b, "GODOWNNAME").lower() in _NO_BATCH else _text(b, "GODOWNNAME"),
+                "order_no": "" if order_no.lower() in _NO_BATCH else order_no,
+            })
+    return lines
 
 
 def parse_vouchers(root, base_types):
@@ -141,56 +217,38 @@ def parse_vouchers(root, base_types):
             continue
         vtype = _text(v, "VOUCHERTYPENAME") or v.get("VCHTYPE", "")
         base = base_types.get(vtype, vtype)
-        lines = []
-        for inv in v.findall("ALLINVENTORYENTRIES.LIST"):
-            qty, unit = parse_qty(_text(inv, "ACTUALQTY") or _text(inv, "BILLEDQTY"))
-            batches = inv.findall("BATCHALLOCATIONS.LIST")
-            line = {
-                "item": _text(inv, "STOCKITEMNAME"),
-                "qty": qty,
-                "unit": unit,
-                "rate": parse_rate(_text(inv, "RATE")),
-                "amount": parse_amount(_text(inv, "AMOUNT")),
-                "due_date": next((_date(_text(b, "ORDERDUEDATE").split()[0]) for b in batches
-                                  if _text(b, "ORDERDUEDATE")), ""),
-                "godown": next((_text(b, "GODOWNNAME") for b in batches if _text(b, "GODOWNNAME")), ""),
-                "against": [
-                    {"order_no": _text(b, "ORDERNO"), "qty": parse_qty(_text(b, "ACTUALQTY"))[0]}
-                    for b in batches
-                    if _text(b, "ORDERNO") and _text(b, "ORDERNO") != "Any"
-                ],
-            }
-            if line["item"]:
-                lines.append(line)
+        if base not in ORDER_BASES | FULFIL_BASES:
+            continue
+        vdate = _date(_text(v, "DATE"))
+        lines = _lines(v, vdate)
         record = {
-            "guid": _text(v, "GUID"),
+            "guid": _text(v, "GUID") or v.get("REMOTEID", ""),
             "master_id": _text(v, "MASTERID"),
             "alter_id": _text(v, "ALTERID"),
-            "date": _date(_text(v, "DATE")),
+            "date": vdate,
             "number": _text(v, "VOUCHERNUMBER"),
             "voucher_type": vtype,
             "kind": "sales" if base in SALES_SIDE else "purchase",
             "party": _text(v, "PARTYLEDGERNAME"),
             "reference": _text(v, "REFERENCE"),
             "narration": _text(v, "NARRATION"),
-            "lines": lines,
         }
         if base in ORDER_BASES:
+            # Deliveries are tracked by "Order No", which defaults to the voucher number.
+            for l in lines:
+                l["order_no"] = l["order_no"] or record["number"]
             record["optional"] = _text(v, "ISOPTIONAL") == "Yes"
             record["total"] = round(sum(l["amount"] for l in lines), 2)
-            # The "Order No" Tally tracks deliveries by; it defaults to the voucher number.
-            for l in lines:
-                against = l.pop("against")
-                l["order_no"] = against[0]["order_no"] if against else record["number"]
+            record["lines"] = lines
             orders.append(record)
-        elif base in FULFIL_BASES:
+        else:
             # Rejections send goods back, so they reduce what counts as delivered.
             sign = -1 if base.startswith("Rejections") else 1
             for l in lines:
-                for a in l["against"]:
+                if l["order_no"]:
                     fulfilments.append({
-                        "kind": record["kind"], "party": record["party"], "order_no": a["order_no"],
-                        "item": l["item"], "qty": sign * (a["qty"] or l["qty"]),
+                        "kind": record["kind"], "party": record["party"], "order_no": l["order_no"],
+                        "item": l["item"], "size": l["size"], "qty": sign * l["qty"],
                         "date": record["date"], "voucher": f'{vtype} {record["number"]}',
                     })
     return orders, fulfilments

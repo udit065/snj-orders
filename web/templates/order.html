@@ -11,30 +11,38 @@
   {% if order.reference %}<div><dt>Reference</dt><dd>{{ order.reference }}</dd></div>{% endif %}
 </dl>
 {% if order.narration %}<p class="note">{{ order.narration }}</p>{% endif %}
-<table class="list">
-<thead><tr><th>Item</th><th class="n">Ordered</th><th class="n">{{ 'Sent' if order.kind == 'sales' else 'Received' }}</th><th class="n">Left</th><th class="n">Rate ₹</th><th class="n">Amount ₹</th><th>Due</th><th>Godown</th></tr></thead>
+<table class="list sizes">
+<thead><tr><th>Item / size</th><th class="n">Ordered</th><th class="n">{{ 'Sent' if order.kind == 'sales' else 'Received' }}</th><th class="n">Left</th><th class="n">Amount ₹</th><th>Due</th></tr></thead>
+{% for g in items %}
 <tbody>
-{% for l in lines %}
-<tr>
-  <td data-l="Item">{{ l['item'] }}</td>
-  <td data-l="Ordered" class="n">{{ l.qty | qty }} {{ l.unit }}</td>
+<tr class="item">
+  <td data-l="Item">{{ g['item'] }}<span class="muted"> · ₹{{ g.rate | inr }}/{{ g.unit }}</span></td>
+  <td data-l="Ordered" class="n">{{ g.qty | qty }} {{ g.unit }}</td>
+  <td data-l="{{ 'Sent' if order.kind == 'sales' else 'Received' }}" class="n">{{ g.sent | qty }}</td>
+  <td data-l="Left" class="n {{ 'left' if g.left > 0 }}">{{ g.left | qty }}</td>
+  <td data-l="Amount ₹" class="n">{{ g.amount | inr }}</td>
+  <td></td>
+</tr>
+{% for l in g.sizes if l.size or g.sizes | length > 1 %}
+<tr class="size">
+  <td data-l="Size">{{ ('Size ' ~ l.size) if l.size else '—' }}</td>
+  <td data-l="Ordered" class="n">{{ l.qty | qty }}</td>
   <td data-l="{{ 'Sent' if order.kind == 'sales' else 'Received' }}" class="n">{{ l.sent | qty }}</td>
   <td data-l="Left" class="n {{ 'left' if l.left > 0 }}">{{ l.left | qty }}</td>
-  <td data-l="Rate ₹" class="n">{{ l.rate | inr }}</td>
   <td data-l="Amount ₹" class="n">{{ l.amount | inr }}</td>
   <td data-l="Due">{{ l.due_date | nice_date }}</td>
-  <td data-l="Godown">{{ l.godown }}</td>
 </tr>
 {% endfor %}
 </tbody>
+{% endfor %}
 </table>
 <h2>{{ 'Deliveries' if order.kind == 'sales' else 'Receipts' }} against this order</h2>
 {% if history %}
 <table class="list">
-<thead><tr><th>Date</th><th>Voucher</th><th>Item</th><th class="n">Qty</th></tr></thead>
+<thead><tr><th>Date</th><th>Voucher</th><th>Item</th><th>Size</th><th class="n">Qty</th></tr></thead>
 <tbody>
 {% for h in history %}
-<tr><td data-l="Date">{{ h.date | nice_date }}</td><td data-l="Voucher">{{ h.voucher }}</td><td data-l="Item">{{ h['item'] }}</td><td data-l="Qty" class="n">{{ h.qty | qty }}</td></tr>
+<tr><td data-l="Date">{{ h.date | nice_date }}</td><td data-l="Voucher">{{ h.voucher }}</td><td data-l="Item">{{ h['item'] }}</td><td data-l="Size">{{ h.size }}</td><td data-l="Qty" class="n">{{ h.qty | qty }}</td></tr>
 {% endfor %}
 </tbody>
 </table>

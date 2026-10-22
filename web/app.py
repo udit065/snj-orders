@@ -82,16 +82,14 @@ def with_progress(conn, guids):
     lines = conn.execute(
         f"SELECT l.*, o.kind, o.party FROM order_lines l JOIN orders o ON o.guid = l.order_guid "
         f"WHERE l.order_guid IN ({marks}) ORDER BY l.order_guid, l.idx", guids).fetchall()
-    keys = {(l["kind"], l["party"], l["order_no"], l["item"]) for l in lines}
     delivered = defaultdict(float)
-    for k in keys:
-        row = conn.execute("SELECT COALESCE(SUM(qty),0) FROM fulfilments WHERE kind=? AND party=? "
-                           "AND order_no=? AND item=?", k).fetchone()
-        delivered[k] = row[0]
+    for r in conn.execute("SELECT kind, party, order_no, item, size, SUM(qty) FROM fulfilments "
+                          "GROUP BY kind, party, order_no, item, size"):
+        delivered[tuple(r[:5])] = r[5]
     out = defaultdict(list)
     for l in lines:
-        k = (l["kind"], l["party"], l["order_no"], l["item"])
-        sent = max(0.0, min(l["qty"], delivered[k]))  # same item twice in one order: fill lines in turn
+        k = (l["kind"], l["party"], l["order_no"], l["item"], l["size"])
+        sent = max(0.0, min(l["qty"], delivered[k]))  # same item and size twice: fill lines in turn
         delivered[k] -= sent
         out[l["order_guid"]].append({**dict(l), "sent": sent, "left": round(l["qty"] - sent, 4)})
     return out
@@ -164,7 +162,7 @@ def order_list(request: Request, kind: str, q: str = "", status: str = "open",
         o["status"] = status_of(lines)
         counts[o["status"]] += 1
         o["status_label"] = STATUS_LABEL[o["status"]]
-        o["items"] = len(lines)
+        o["items"] = len({l["item"] for l in lines})
         dues = [l["due_date"] for l in lines if l["due_date"] and l["left"] > 0]
         o["next_due"] = min(dues) if dues else ""
         o["overdue"] = bool(o["next_due"] and o["next_due"] < today)
@@ -186,11 +184,24 @@ def order_detail(request: Request, guid: str):
         order_nos = sorted({l["order_no"] for l in lines})
         marks = ",".join("?" * len(order_nos)) or "''"
         history = c.execute(
-            f"SELECT * FROM fulfilments WHERE kind=? AND party=? AND order_no IN ({marks}) ORDER BY date",
+            f"SELECT * FROM fulfilments WHERE kind=? AND party=? AND order_no IN ({marks}) "
+            "ORDER BY date, voucher, item, size",
             [order["kind"], order["party"], *order_nos]).fetchall()
     order["status"] = status_of(lines)
     order["status_label"] = STATUS_LABEL[order["status"]]
-    return render(request, "order.html", order=order, lines=lines, history=history)
+    return render(request, "order.html", order=order, items=group_by_item(lines), history=history)
+
+
+def group_by_item(lines):
+    """Sizes of the same item sit together under one heading, with item totals."""
+    items = {}
+    for l in lines:
+        g = items.setdefault(l["item"], {"item": l["item"], "unit": l["unit"], "rate": l["rate"],
+                                         "qty": 0.0, "sent": 0.0, "left": 0.0, "amount": 0.0, "sizes": []})
+        for k in ("qty", "sent", "left", "amount"):
+            g[k] = round(g[k] + l[k], 4)
+        g["sizes"].append(l)
+    return list(items.values())
 
 
 # --- bridge endpoint -----------------------------------------------------------

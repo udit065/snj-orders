@@ -13,14 +13,14 @@ CREATE TABLE IF NOT EXISTS orders (
     master_id TEXT, alter_id TEXT
 );
 CREATE TABLE IF NOT EXISTS order_lines (
-    order_guid TEXT NOT NULL, idx INTEGER, item TEXT, qty REAL, unit TEXT, rate REAL,
+    order_guid TEXT NOT NULL, idx INTEGER, item TEXT, size TEXT, qty REAL, unit TEXT, rate REAL,
     amount REAL, due_date TEXT, godown TEXT, order_no TEXT
 );
 CREATE INDEX IF NOT EXISTS order_lines_guid ON order_lines(order_guid);
 CREATE TABLE IF NOT EXISTS fulfilments (
-    kind TEXT, party TEXT, order_no TEXT, item TEXT, qty REAL, date TEXT, voucher TEXT
+    kind TEXT, party TEXT, order_no TEXT, item TEXT, size TEXT, qty REAL, date TEXT, voucher TEXT
 );
-CREATE INDEX IF NOT EXISTS fulfilments_key ON fulfilments(kind, party, order_no, item);
+CREATE INDEX IF NOT EXISTS fulfilments_key ON fulfilments(kind, party, order_no, item, size);
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE IF NOT EXISTS users (
     username TEXT PRIMARY KEY, name TEXT, pw_hash TEXT NOT NULL, active INTEGER DEFAULT 1
@@ -58,14 +58,14 @@ def replace_all(orders, fulfilments, synced_at):
                  int(o.get("optional", False)), o.get("master_id", ""), o.get("alter_id", "")),
             )
             c.executemany(
-                "INSERT INTO order_lines VALUES (?,?,?,?,?,?,?,?,?,?)",
-                [(o["guid"], i, l["item"], l["qty"], l["unit"], l["rate"], l["amount"],
+                "INSERT INTO order_lines VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                [(o["guid"], i, l["item"], l.get("size", ""), l["qty"], l["unit"], l["rate"], l["amount"],
                   l.get("due_date", ""), l.get("godown", ""), l.get("order_no") or o["number"])
                  for i, l in enumerate(o["lines"])],
             )
         c.executemany(
-            "INSERT INTO fulfilments VALUES (?,?,?,?,?,?,?)",
-            [(f["kind"], f["party"], f["order_no"], f["item"], f["qty"], f["date"], f["voucher"])
+            "INSERT INTO fulfilments VALUES (?,?,?,?,?,?,?,?)",
+            [(f["kind"], f["party"], f["order_no"], f["item"], f.get("size", ""), f["qty"], f["date"], f["voucher"])
              for f in fulfilments],
         )
         c.execute("INSERT OR REPLACE INTO meta VALUES ('synced_at', ?)", (synced_at,))

@@ -38,3 +38,12 @@ table.list { width:100%; border-collapse:collapse; background:var(--card); borde
   .list td { display:flex; justify-content:space-between; gap:12px; border:0; padding:3px 10px; text-align:right; }
   .list td::before { content:attr(data-l); color:var(--muted); font-size:13px; text-align:left; }
 }
+.sizes tbody { border-top:2px solid var(--line); }
+.sizes tr.item td { font-weight:600; background:#fafbfc; }
+.sizes tr.size td:first-child { padding-left:28px; color:var(--muted); }
+.sizes tbody tr { cursor:default; }
+@media (max-width:700px) {
+  .sizes tr.size { padding:2px 4px 2px 18px; }
+  .sizes tr.size td:first-child { padding-left:10px; }
+}
+.list td[data-l="Date"], .list td[data-l="Next due"], .list td[data-l="Due"] { white-space:nowrap; }

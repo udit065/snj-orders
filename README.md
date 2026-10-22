@@ -29,25 +29,36 @@ Make a secret with `python -c "import secrets; print(secrets.token_urlsafe(32))"
 
 ## 2. Set up the bridge on the Tally server
 
-1. In Tally, check that it acts as a **Server** on port **9000**
-   (**F1 Help → Settings → Connectivity → Client/Server configuration**; Tally's help also lists it under
-   **Exchange → Data Synchronization**). If the Frappe connection already works, this is already on.
-   Do **not** open port 9000 in the server's firewall.
-2. Install Python 3 for Windows (python.org, tick "Add to PATH").
-3. Copy the `bridge` folder to the server, copy `config.example.ini` to `config.ini`, and fill it in.
-4. Test without sending anything: `python bridge.py --dry-run`. It prints the first few orders it read.
-5. Send once: `python bridge.py --once`, then check the website.
-6. Keep it running: in Windows **Task Scheduler**, create a task "At startup" that runs
-   `python C:\snj-orders\bridge\bridge.py` (it syncs every 5 minutes by default).
+SNJ's Tally is hosted by tallyprimecloud.in and staff only see a locked-down window,
+so this is done by whoever installed the existing `tally_bridge` (Frappe) program,
+the same way. The two programs run side by side; this one never writes to Tally.
 
-Tally must be open with the company loaded for the bridge to read it. If Tally is closed, the bridge
-logs an error and tries again next round; the website keeps showing the last copy and its time.
+1. Tally already acts as a server on port 9000 (the Frappe bridge uses it). Do **not**
+   open port 9000 in the server's firewall.
+2. Python is already on the server (`C:\Program Files\Python314\python.exe`).
+3. Copy the `bridge` folder to `C:\snj-orders\bridge`, copy `config.example.ini` to
+   `config.ini`. The company name is already filled in.
+4. Test without sending anything, in Command Prompt:
+   ```
+   cd C:\snj-orders\bridge
+   python bridge.py --dry-run
+   ```
+   It prints how many orders it read and the first three. Send that output back.
+5. Once the website is online, put its address and token in `config.ini` and run
+   `python bridge.py --once`, then check the website.
+6. Keep it running: in Windows **Task Scheduler**, create a task "At startup" that runs
+   `python C:\snj-orders\bridge\bridge.py` (it syncs every 15 minutes by default).
+
+The bridge asks Tally for one week at a time, and tries a smaller field list if
+Tally answers the full one with nothing (some TallyPrime builds do that). If a read
+comes back empty, the website keeps its last copy rather than going blank.
 
 ## How "sent / left" is worked out
 
-Tally links deliveries to orders through the **Order No.** on each invoice, delivery note, purchase or
-receipt note line. The bridge collects those lines, and the website subtracts them from each order line.
-Orders older than `days_back` (default 365 days) are not copied.
+SNJ keeps sizes as Tally batches, so every order line is an item and a size. Tally links
+deliveries to orders through the **Order No.** on each invoice, delivery note, purchase or
+receipt note batch line. The bridge collects those, and the website subtracts them from each
+item and size. Orders older than `days_back` (default 120 days) are not copied.
 
 ## Tests
 

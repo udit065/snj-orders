@@ -34,21 +34,49 @@ def load_config(path):
         "company": s.get("company", "").strip() or None,
         "website_url": s.get("website_url", "").rstrip("/"),
         "token": s.get("token", ""),
-        "days_back": s.getint("days_back", 365),
-        "every_minutes": s.getint("every_minutes", 5),
+        "days_back": s.getint("days_back", 120),
+        "days_ahead": s.getint("days_ahead", 60),
+        "chunk_days": s.getint("chunk_days", 7),
+        "timeout": s.getint("timeout", 300),
+        "every_minutes": s.getint("every_minutes", 15),
     }
 
 
 def read_tally(cfg):
-    types_root = tally.post(cfg["tally_url"], tally.voucher_types_request(cfg["company"]))
-    base = tally.resolve_base_types(types_root)
+    try:
+        base = tally.resolve_base_types(
+            tally.post(cfg["tally_url"], tally.voucher_types_request(cfg["company"]), cfg["timeout"]))
+    except tally.TallyError as e:
+        if "Could not reach" in str(e):
+            raise
+        base = {}
+    if not any(b in tally.ORDER_BASES for b in base.values()):
+        log.warning("Tally didn't list its voucher types; using the built-in names only")
+        base = dict(tally.DEFAULT_TYPES)
     wanted = {n for n, b in base.items() if b in tally.ORDER_BASES | tally.FULFIL_BASES}
-    if not wanted:
-        raise tally.TallyError("No order voucher types found in Tally. Is the right company open?")
-    to_date = dt.date.today() + dt.timedelta(days=366)  # orders can be dated ahead
-    from_date = dt.date.today() - dt.timedelta(days=cfg["days_back"])
-    root = tally.post(cfg["tally_url"], tally.vouchers_request(wanted, from_date, to_date, cfg["company"]))
-    return tally.parse_vouchers(root, base)
+
+    # Ask for a week at a time, as large requests can time out on a busy Tally.
+    today = dt.date.today()
+    start = today - dt.timedelta(days=cfg["days_back"])
+    end = today + dt.timedelta(days=cfg["days_ahead"])
+    orders, fulfilments = [], []
+    variants = list(tally.FETCH_VARIANTS)
+    while start <= end:
+        stop = min(start + dt.timedelta(days=cfg["chunk_days"] - 1), end)
+        for variant in variants:
+            root = tally.post(cfg["tally_url"],
+                              tally.vouchers_request(wanted, start, stop, cfg["company"], variant),
+                              cfg["timeout"])
+            o, f = tally.parse_vouchers(root, base)
+            if o or f:
+                if len(variants) > 1:
+                    log.info("Tally answers the '%s' field list; using it from now on", variant)
+                    variants = [variant]
+                break
+        orders += o
+        fulfilments += f
+        start = stop + dt.timedelta(days=1)
+    return orders, fulfilments
 
 
 def send(cfg, orders, fulfilments):
@@ -72,7 +100,13 @@ def sync_once(cfg, dry_run=False):
     log.info("Read %d sales orders, %d purchase orders, %d delivery lines from Tally",
              sales, len(orders) - sales, len(fulfilments))
     if dry_run:
-        print(json.dumps(orders[:3], indent=2))
+        for o in orders[:3]:
+            sizes = len(o["lines"])
+            print(f'{o["date"]}  {o["voucher_type"]} {o["number"]}  {o["party"]}  Rs {o["total"]:,.2f}  ({sizes} item/size lines)')
+        return
+    if not orders:
+        # Never wipe the website because of one empty read (Tally busy, wrong company...).
+        log.warning("Tally returned no orders, so the website was left unchanged")
         return
     result = send(cfg, orders, fulfilments)
     log.info("Website accepted: %s", result)
