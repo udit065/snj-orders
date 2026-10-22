@@ -87,6 +87,11 @@ def replace_all(orders, fulfilments, synced_at, date_from=None, date_to=None):
             c.execute("INSERT OR REPLACE INTO meta VALUES ('full_synced_at', ?)", (synced_at,))
 
 
+def has_full():
+    with connect() as c:
+        return c.execute("SELECT 1 FROM meta WHERE key='full_synced_at'").fetchone() is not None
+
+
 def last_synced():
     with connect() as c:
         row = c.execute("SELECT value FROM meta WHERE key='synced_at'").fetchone()

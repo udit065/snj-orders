@@ -1,0 +1,21 @@
+# Render "Blueprint": New > Blueprint > pick this repository. Free plan, for testing.
+# The free plan sleeps when idle and forgets its data on restart; the bridge sends a
+# fresh full copy when that happens, and logins come from STAFF_LOGINS.
+services:
+  - type: web
+    name: snj-orders
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: cd web && uvicorn app:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: HTTPS_ONLY
+        value: "1"
+      - key: BRIDGE_TOKEN
+        generateValue: true
+      - key: SECRET_KEY
+        generateValue: true
+      - key: STAFF_LOGINS
+        sync: false

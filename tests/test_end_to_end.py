@@ -26,6 +26,7 @@ def tally_url():
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("ORDERS_DB", str(tmp_path / "t.db"))
     monkeypatch.setenv("BRIDGE_TOKEN", "secret-token")
+    monkeypatch.setenv("STAFF_LOGINS", "sidharth:Long-Pass-1, short:abc")
     for m in ("db", "app"):
         sys.modules.pop(m, None)
     import app as webapp
@@ -98,7 +99,7 @@ def test_empty_read_leaves_website_alone(tally_url, monkeypatch):
 def test_website_shows_progress_by_size(tally_url, client):
     assert client.post("/api/sync", content="{}").status_code == 401
     r = post_sync(client, dt.date(2026, 9, 1), dt.date(2026, 11, 30), True, tally_url)
-    assert r.json() == {"orders": 4, "fulfilments": 4}
+    assert r.json() == {"orders": 4, "fulfilments": 4, "has_full": True}
 
     assert client.get("/orders/sales", follow_redirects=False).headers["location"] == "/login"
     assert "Wrong username" in client.post("/login", data={"username": "ramesh", "password": "nope"}).text
@@ -142,7 +143,37 @@ def test_quick_sync_replaces_only_recent_days(tally_url, client):
                       synced_at="2026-10-17T11:00:00+05:30")
     finally:
         bridge.read_tally = real
-    assert r.json() == {"orders": 0, "fulfilments": 4}
+    assert r.json() == {"orders": 0, "fulfilments": 4, "has_full": True}
     page = client.get("/orders/sales?status=all").text
     assert "Mehta" not in page and "Agarwal" in page and "11:00 AM" in page
     assert "GST Sales SNJ/26-27/2201" in client.get("/order/g-so-1").text
+
+
+def test_bridge_send_is_compressed_and_flags_missing_full_copy(tally_url, client, monkeypatch):
+    import bridge
+    import urllib.request
+
+    real_urlopen = urllib.request.urlopen
+
+    def via_test_client(req, timeout):
+        if req.full_url.startswith(tally_url):
+            return real_urlopen(req, timeout=timeout)
+        r = client.post("/api/sync", content=req.data, headers=dict(req.header_items()))
+        class Resp:
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+            def read(self): return r.content
+        assert r.status_code == 200, r.text
+        return Resp()
+    monkeypatch.setattr(urllib.request, "urlopen", via_test_client)
+    cfg = {**CFG, "tally_url": tally_url, "website_url": "http://site", "token": "secret-token",
+           "days_back": 400, "quick_days_back": 400, "days_ahead": 60}
+    assert bridge.sync_once(cfg, full=False)["has_full"] is False  # fresh site: bridge must send a full copy
+    assert bridge.sync_once(cfg, full=True)["has_full"] is True
+
+
+def test_staff_logins_from_environment(client):
+    assert "Wrong" not in client.post("/login", data={"username": "sidharth", "password": "Long-Pass-1"}).text
+    assert "Sidharth" in client.get("/orders/sales").text
+    client.get("/logout")
+    assert "Wrong" in client.post("/login", data={"username": "short", "password": "abc"}).text

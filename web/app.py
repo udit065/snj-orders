@@ -1,6 +1,8 @@
 """SNJ Orders website (view only): sales and purchase orders copied from Tally."""
 
+import gzip
 import hmac
+import json
 import os
 import secrets
 from collections import defaultdict
@@ -24,6 +26,13 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, https_only=os.envir
 app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")), name="static")
 templates = Jinja2Templates(directory=os.path.join(HERE, "templates"))
 db.init()
+
+# Free hosting wipes the disk on restart, so logins can come from the environment:
+# STAFF_LOGINS="sidharth:Secret-Pass-1,ramesh:Other-Pass-2" (re-created at every start).
+for pair in filter(None, (p.strip() for p in os.environ.get("STAFF_LOGINS", "").split(","))):
+    name, _, password = pair.partition(":")
+    if name and len(password) >= 8:
+        db.set_user(name, name.title(), password)
 
 
 def inr(value):
@@ -212,12 +221,18 @@ async def sync(request: Request):
     auth = request.headers.get("authorization", "")
     if not BRIDGE_TOKEN or not hmac.compare_digest(auth, f"Bearer {BRIDGE_TOKEN}"):
         raise HTTPException(401, "Bad bridge token")
-    data = await request.json()
+    body = await request.body()
+    if request.headers.get("content-encoding") == "gzip":
+        body = gzip.decompress(body)
+    data = json.loads(body)
     if data.get("full", True):
         db.replace_all(data["orders"], data["fulfilments"], data["synced_at"])
     else:
         db.replace_all(data["orders"], data["fulfilments"], data["synced_at"], data["from"], data["to"])
-    return {"orders": len(data["orders"]), "fulfilments": len(data["fulfilments"])}
+    # has_full tells the bridge whether a full copy is here; after a restart on free
+    # hosting it isn't, and the bridge sends one straight away.
+    return {"orders": len(data["orders"]), "fulfilments": len(data["fulfilments"]),
+            "has_full": db.has_full()}
 
 
 @app.exception_handler(HTTPException)

@@ -27,6 +27,14 @@ uvicorn app:app --host 0.0.0.0 --port 8000              # put it behind HTTPS
 
 Make a secret with `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
 
+### On Render's free plan (for testing)
+
+New > Blueprint > pick this repository; `render.yaml` sets everything up. Fill in
+`STAFF_LOGINS` as `name:password,name2:password2` (passwords of 8+ characters).
+Copy the generated `BRIDGE_TOKEN` into the bridge's `config.ini`.
+The free plan sleeps when nobody visits and forgets its data on restart; logins come
+back from `STAFF_LOGINS`, and the bridge notices and sends a full copy again.
+
 ### On Railway
 
 Create a project from this GitHub repository; the `Procfile` starts the website.

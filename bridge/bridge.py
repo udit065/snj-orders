@@ -11,6 +11,7 @@ outgoing connections to the website, so no port is opened on the server.
 import argparse
 import configparser
 import datetime as dt
+import gzip
 import json
 import logging
 import os
@@ -87,18 +88,19 @@ def window(cfg, full):
 
 
 def send(cfg, orders, fulfilments, start, end, full):
-    payload = json.dumps({
+    payload = gzip.compress(json.dumps({
         "synced_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "full": full,
         "from": start.isoformat(),
         "to": end.isoformat(),
         "orders": orders,
         "fulfilments": fulfilments,
-    }).encode("utf-8")
+    }).encode("utf-8"))
     req = urllib.request.Request(
         cfg["website_url"] + "/api/sync",
         data=payload,
-        headers={"Content-Type": "application/json", "Authorization": f'Bearer {cfg["token"]}'},
+        headers={"Content-Type": "application/json", "Content-Encoding": "gzip",
+                 "Authorization": f'Bearer {cfg["token"]}'},
     )
     with urllib.request.urlopen(req, timeout=300) as resp:
         return json.loads(resp.read())
@@ -123,6 +125,7 @@ def sync_once(cfg, full=True, dry_run=False):
         return
     result = send(cfg, orders, fulfilments, start, end, full)
     log.info("Website accepted: %s", result)
+    return result
 
 
 def main():
@@ -150,9 +153,12 @@ def main():
         now = dt.datetime.now()
         full = last_full is None or (now.date() > last_full and now.hour >= cfg["full_sync_hour"])
         try:
-            sync_once(cfg, full=full)
+            result = sync_once(cfg, full=full)
             if full:
                 last_full = now.date()
+            elif result and result.get("has_full") is False:
+                log.info("The website lost its copy (restarted?); a full sync follows")
+                last_full = None
         except Exception as e:  # keep running; Tally may just be closed for a moment
             log.error("Sync failed: %s", e)
         time.sleep(cfg["every_minutes"] * 60)
