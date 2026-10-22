@@ -84,7 +84,11 @@ def post(url, body, timeout=120):
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
     except OSError as e:
-        raise TallyError(f"Could not reach Tally at {url}. Is Tally open with the company loaded? ({e})")
+        raise TallyError(
+            f"Could not reach Tally at {url} ({getattr(e, 'reason', e)}).\n"
+            "Check that TallyPrime is open on this server with the company loaded, and that\n"
+            "F1 Help > Settings > Connectivity > Client/Server configuration says\n"
+            "'TallyPrime acts as: Server' (or Both) on the same port as tally_url in config.ini.")
     return parse_xml(raw)
 
 

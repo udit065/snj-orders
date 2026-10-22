@@ -124,7 +124,10 @@ def main():
         sys.exit("Set website_url and token in config.ini")
 
     if args.once or args.dry_run:
-        sync_once(cfg, args.dry_run)
+        try:
+            sync_once(cfg, args.dry_run)
+        except tally.TallyError as e:
+            sys.exit(f"Problem: {e}")
         return
     while True:
         try:
