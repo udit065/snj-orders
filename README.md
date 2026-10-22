@@ -27,6 +27,13 @@ uvicorn app:app --host 0.0.0.0 --port 8000              # put it behind HTTPS
 
 Make a secret with `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
 
+### On Railway
+
+Create a project from this GitHub repository; the `Procfile` starts the website.
+Add a volume mounted at `/data`, and set the variables `ORDERS_DB=/data/orders.db`,
+`BRIDGE_TOKEN`, `SECRET_KEY` and `HTTPS_ONLY=1`. Add staff logins from Railway's shell
+with `cd web && python manage.py add-user ...`.
+
 ## 2. Set up the bridge on the Tally server
 
 SNJ's Tally is hosted by tallyprimecloud.in and staff only see a locked-down window,
