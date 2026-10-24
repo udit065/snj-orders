@@ -41,7 +41,7 @@ def client(tmp_path, monkeypatch):
 
 import datetime as dt  # noqa: E402
 
-CFG = {"company": "SN JAIN INDUSTRIES PVT LTD - (26-27)", "timeout": 30, "chunk_days": 7}
+CFG = {"company": "SN JAIN INDUSTRIES PVT LTD - (26-27)", "timeout": 30, "days_per_request": 7}
 
 
 def read(tally_url, start=dt.date(2026, 9, 1), end=dt.date(2026, 11, 30)):
@@ -196,7 +196,7 @@ def test_full_copy_carries_on_after_being_cut_off(site, client, monkeypatch):
     import db
     cfg, sent = site
     real, calls = bridge.read_chunk, []
-    quick_weeks = len(list(bridge.chunks(cfg, *bridge.window(cfg, full=False))))
+    quick_weeks = 1  # the quick sync is a single request
 
     def dies_after_some_weeks(*a):
         calls.append(a)
@@ -235,7 +235,7 @@ def test_empty_quick_read_leaves_website_alone(site, client, monkeypatch):
     import bridge
     cfg, sent = site
     bridge.run_round(cfg)
-    monkeypatch.setattr(bridge, "read_tally", lambda *a: ([], []))
+    monkeypatch.setattr(bridge, "read_chunk", lambda *a: ([], []))
     sent.clear()
     bridge.run_round(cfg)
     assert sent == [{"synced_at": sent[0]["synced_at"], "status_only": True}]

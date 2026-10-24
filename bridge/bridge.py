@@ -8,7 +8,7 @@ outgoing connections to the website, so no port is opened on the server.
     python bridge.py --dry-run  # read Tally and print a summary, send nothing
 
 A full copy of SNJ's books takes ~12 minutes to read, longer than a remote
-session reliably stays connected. So it is sent a week at a time, with the
+session reliably stays connected. So it is sent a month at a time, with the
 place it got to saved in state.json, and every round carries on from there.
 install-task.cmd makes Windows run a round every 10 minutes in the background.
 """
@@ -44,7 +44,9 @@ def load_config(path):
         "token": s.get("token", ""),
         "days_back": s.getint("days_back", 120),
         "days_ahead": s.getint("days_ahead", 60),
-        "chunk_days": s.getint("chunk_days", 7),
+        # Tally looks through every voucher for each request, so a request costs ~30 s
+        # however few days it covers: fewer, longer requests are much quicker.
+        "days_per_request": s.getint("days_per_request", 31),
         "timeout": s.getint("timeout", 300),
         "every_minutes": s.getint("every_minutes", 10),
         "minutes_per_round": s.getint("minutes_per_round", 7),
@@ -92,9 +94,9 @@ def read_chunk(cfg, types, start, stop):
 
 
 def chunks(cfg, start, end):
-    """A week at a time, as large requests can time out on a busy Tally."""
+    """A month at a time, as very large requests can time out on a busy Tally."""
     while start <= end:
-        stop = min(start + dt.timedelta(days=cfg["chunk_days"] - 1), end)
+        stop = min(start + dt.timedelta(days=cfg["days_per_request"] - 1), end)
         yield start, stop
         start = stop + dt.timedelta(days=1)
 
@@ -159,7 +161,7 @@ def save_state(cfg, state):
 def quick_sync(cfg, types):
     start, end = window(cfg, full=False)
     started = time.monotonic()
-    orders, fulfilments = read_tally(cfg, start, end, types)
+    orders, fulfilments = read_chunk(cfg, types, start, end)  # one request
     log.info("Quick sync %s..%s: read %d orders, %d delivery lines in %.0f s",
              start, end, len(orders), len(fulfilments), time.monotonic() - started)
     if not orders and not fulfilments:
@@ -191,7 +193,7 @@ def run_round(cfg, minutes=None):
         full = {"run": dt.datetime.now().isoformat(), "from": start.isoformat(), "to": end.isoformat(),
                 "next": start.isoformat(), "orders": 0}
         send(cfg, {"start_full": True, "run": full["run"]})
-        log.info("Starting a full copy of %s..%s, a week at a time", start, end)
+        log.info("Starting a full copy of %s..%s, a month at a time", start, end)
     state["full"] = full
     save_state(cfg, state)
 
@@ -215,7 +217,7 @@ def run_round(cfg, minutes=None):
             state.pop("full")
             save_state(cfg, state)
             return
-        stop = min(start + dt.timedelta(days=cfg["chunk_days"] - 1), end)
+        stop = min(start + dt.timedelta(days=cfg["days_per_request"] - 1), end)
         orders, fulfilments = read_chunk(cfg, types, start, stop)
         if orders or fulfilments:
             send_window(cfg, orders, fulfilments, start, stop)

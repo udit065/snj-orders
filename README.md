@@ -70,8 +70,8 @@ the same way. The two programs run side by side; this one never writes to Tally.
 Reading SNJ's full 6 months (2,300+ orders, 60,000 delivery lines) takes about 12 minutes,
 longer than a remote session reliably stays connected. So every round first re-reads the
 last `quick_days_back` days (10 by default: new orders, edits and deliveries all land
-there), then spends up to `minutes_per_round` minutes on the full copy, a week at a time.
-Each week is saved on the website as it is sent, and where it got to is kept in
+there), then spends up to `minutes_per_round` minutes on the full copy, a month at a time.
+Each month is saved on the website as it is sent, and where it got to is kept in
 `state.json`, so the next round carries on from there. A full copy is made at the start
 and once a night after `full_sync_hour`, and again whenever the website has lost its copy
 (free hosting forgets its data when it restarts).
@@ -79,7 +79,8 @@ and once a night after `full_sync_hour`, and again whenever the website has lost
 Orders whose number contains "CANCEL" (SNJ's way of cancelling, e.g. `SO/D5/123 R(CANCEL)`)
 show as Cancelled and are hidden from the default list.
 
-The bridge asks Tally for one week at a time, and tries a smaller field list if
+The bridge asks Tally for a month at a time (each request costs ~30 s on SNJ's
+Tally however short the period, because Tally checks every voucher), and tries a smaller field list if
 Tally answers the full one with nothing (some TallyPrime builds do that). If a read
 comes back empty, the website keeps its last copy rather than going blank.
 
