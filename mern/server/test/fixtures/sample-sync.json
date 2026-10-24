@@ -1,0 +1,180 @@
+{
+ "orders": [
+  {
+   "guid": "g-so-1",
+   "master_id": "101",
+   "alter_id": "900",
+   "date": "2026-10-12",
+   "number": "SO/26-27/0412",
+   "voucher_type": "SNJ Order",
+   "kind": "sales",
+   "party": "Agarwal Hosiery",
+   "reference": "Pad photo 12 Oct",
+   "narration": "Urgent before Diwali",
+   "optional": false,
+   "cancelled": false,
+   "total": 21600.0,
+   "lines": [
+    {
+     "item": "001 SPORT BRA (28X40)-(Doz)",
+     "size": "32",
+     "qty": 3.0,
+     "unit": "Doz",
+     "rate": 1200.0,
+     "amount": 3600.0,
+     "due_date": "2026-10-20",
+     "godown": "",
+     "order_no": "SO/26-27/0412"
+    },
+    {
+     "item": "001 SPORT BRA (28X40)-(Doz)",
+     "size": "34",
+     "qty": 3.0,
+     "unit": "Doz",
+     "rate": 1200.0,
+     "amount": 3600.0,
+     "due_date": "2026-10-20",
+     "godown": "",
+     "order_no": "SO/26-27/0412"
+    },
+    {
+     "item": "NIKER S-XL-(Doz)",
+     "size": "36",
+     "qty": 6.0,
+     "unit": "Box",
+     "rate": 2400.0,
+     "amount": 14400.0,
+     "due_date": "2026-10-01",
+     "godown": "Main Location",
+     "order_no": "SO/26-27/0412"
+    }
+   ]
+  },
+  {
+   "guid": "g-so-2",
+   "master_id": "",
+   "alter_id": "",
+   "date": "2026-10-15",
+   "number": "SO/26-27/0420",
+   "voucher_type": "Sales Order",
+   "kind": "sales",
+   "party": "Mehta & Sons",
+   "reference": "",
+   "narration": "",
+   "optional": false,
+   "cancelled": false,
+   "total": 4800.0,
+   "lines": [
+    {
+     "item": "NIKER XXL-(Doz)",
+     "size": "38",
+     "qty": 2.0,
+     "unit": "Box",
+     "rate": 2400.0,
+     "amount": 4800.0,
+     "due_date": "2026-11-01",
+     "godown": "",
+     "order_no": "SO/26-27/0420"
+    }
+   ]
+  },
+  {
+   "guid": "g-so-4",
+   "master_id": "",
+   "alter_id": "",
+   "date": "2026-10-13",
+   "number": "SO/D5/123 R(CANCEL)",
+   "voucher_type": "Sales Order",
+   "kind": "sales",
+   "party": "Dhanlaxmi Enterprises",
+   "reference": "",
+   "narration": "",
+   "optional": false,
+   "cancelled": true,
+   "total": 2400.0,
+   "lines": [
+    {
+     "item": "NIKER XXL-(Doz)",
+     "size": "40",
+     "qty": 1.0,
+     "unit": "Box",
+     "rate": 2400.0,
+     "amount": 2400.0,
+     "due_date": "2026-10-14",
+     "godown": "",
+     "order_no": "SO/D5/123"
+    }
+   ]
+  },
+  {
+   "guid": "g-po-1",
+   "master_id": "",
+   "alter_id": "",
+   "date": "2026-10-05",
+   "number": "PO/0077",
+   "voucher_type": "Purchase Order",
+   "kind": "purchase",
+   "party": "Tirupur Yarns Pvt Ltd",
+   "reference": "",
+   "narration": "",
+   "optional": false,
+   "cancelled": false,
+   "total": 155000.0,
+   "lines": [
+    {
+     "item": "Cotton Yarn 30s",
+     "size": "",
+     "qty": 500.0,
+     "unit": "Kg",
+     "rate": 310.0,
+     "amount": 155000.0,
+     "due_date": "2026-10-25",
+     "godown": "",
+     "order_no": "PO/0077"
+    }
+   ]
+  }
+ ],
+ "fulfilments": [
+  {
+   "kind": "sales",
+   "party": "Agarwal Hosiery",
+   "order_no": "SO/26-27/0412",
+   "item": "001 SPORT BRA (28X40)-(Doz)",
+   "size": "32",
+   "qty": 3.0,
+   "date": "2026-10-14",
+   "voucher": "GST Sales SNJ/26-27/2201"
+  },
+  {
+   "kind": "sales",
+   "party": "Agarwal Hosiery",
+   "order_no": "SO/26-27/0412",
+   "item": "001 SPORT BRA (28X40)-(Doz)",
+   "size": "34",
+   "qty": 1.0,
+   "date": "2026-10-14",
+   "voucher": "GST Sales SNJ/26-27/2201"
+  },
+  {
+   "kind": "sales",
+   "party": "Agarwal Hosiery",
+   "order_no": "SO/26-27/0412",
+   "item": "NIKER S-XL-(Doz)",
+   "size": "36",
+   "qty": 2.0,
+   "date": "2026-10-14",
+   "voucher": "GST Sales SNJ/26-27/2201"
+  },
+  {
+   "kind": "purchase",
+   "party": "Tirupur Yarns Pvt Ltd",
+   "order_no": "PO/0077",
+   "item": "Cotton Yarn 30s",
+   "size": "",
+   "qty": 500.0,
+   "date": "2026-10-16",
+   "voucher": "Receipt Note RN/31"
+  }
+ ]
+}

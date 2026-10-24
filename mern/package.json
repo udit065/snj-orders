@@ -1,0 +1,11 @@
+{
+  "name": "snj-orders",
+  "private": true,
+  "description": "SNJ Orders website (MERN): React pages in client/, Express + MongoDB server in server/",
+  "scripts": {
+    "build": "npm ci --prefix client && npm run build --prefix client && npm ci --omit=dev --prefix server",
+    "start": "npm start --prefix server",
+    "test": "npm test --prefix server"
+  },
+  "engines": { "node": ">=20" }
+}

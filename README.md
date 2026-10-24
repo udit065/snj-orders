@@ -3,6 +3,8 @@
 A private, **view-only** website where office staff can see SN Jain Industries' sales and purchase orders
 from Tally Prime: what was ordered, what has been sent or received, what is still left, and what is overdue.
 
+A MERN version of the website (same pages, MongoDB storage) is in [`mern/`](mern/README.md).
+
 It has two parts:
 
 | Part | Runs on | Does |

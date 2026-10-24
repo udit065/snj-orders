@@ -1,0 +1,50 @@
+:root { --bg:#f6f7f9; --card:#fff; --ink:#1d2433; --muted:#667085; --line:#e4e7ec; --accent:#1f5fbf;
+        --ok:#1a7f4b; --okbg:#e6f4ec; --warn:#a15c00; --warnbg:#fff3e0; --bad:#b42318; --badbg:#fdecea; }
+* { box-sizing:border-box; }
+body { margin:0; font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--bg); }
+a { color:var(--accent); text-decoration:none; }
+main { max-width:1100px; margin:0 auto; padding:16px; }
+h1 { font-size:22px; margin:8px 0 16px; } h2 { font-size:17px; margin-top:28px; }
+.top { display:flex; flex-wrap:wrap; gap:8px 20px; align-items:center; padding:10px 16px; background:var(--card); border-bottom:1px solid var(--line); }
+.brand { font-weight:700; color:var(--ink); }
+.top nav { display:flex; gap:4px; flex:1; }
+.top nav a { padding:6px 10px; border-radius:6px; color:var(--ink); }
+.top nav a.on { background:#e8effb; color:var(--accent); font-weight:600; }
+.who { color:var(--muted); font-size:14px; }
+.fresh { text-align:center; font-size:13px; color:var(--muted); padding:6px 16px; background:#eef1f5; }
+.muted { color:var(--muted); }
+.filters { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+.filters input, .filters select, .filters button, .login input, .login button { font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:var(--card); }
+.filters input[name=q] { flex:1 1 260px; }
+.filters .d { display:flex; gap:6px; align-items:center; color:var(--muted); font-size:14px; }
+button { background:var(--accent) !important; color:#fff; border-color:var(--accent) !important; cursor:pointer; }
+table.list { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+.list th, .list td { padding:9px 12px; text-align:left; border-bottom:1px solid var(--line); }
+.list th { font-size:13px; color:var(--muted); font-weight:600; background:#fafbfc; }
+.list tbody tr { cursor:pointer; } .list tbody tr:hover { background:#f7f9fc; }
+.n { text-align:right !important; font-variant-numeric:tabular-nums; }
+.st { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:600; vertical-align:middle; }
+.st.pending { background:var(--warnbg); color:var(--warn); } .st.partly { background:#e8effb; color:var(--accent); } .st.done { background:var(--okbg); color:var(--ok); }
+.late { color:var(--bad); font-weight:600; } .left { font-weight:600; }
+.tag { font-size:11px; color:var(--muted); border:1px solid var(--line); border-radius:4px; padding:0 4px; }
+.facts { display:flex; flex-wrap:wrap; gap:12px 32px; margin:0 0 16px; } .facts dt { font-size:13px; color:var(--muted); } .facts dd { margin:0; font-weight:600; }
+.note { background:var(--card); border-left:3px solid var(--line); padding:8px 12px; }
+.error { background:var(--badbg); color:var(--bad); padding:8px 12px; border-radius:6px; }
+.login { max-width:340px; margin:12vh auto; background:var(--card); padding:24px; border:1px solid var(--line); border-radius:10px; display:flex; flex-direction:column; gap:12px; }
+.login h1 { margin:0; } .login label { display:flex; flex-direction:column; gap:4px; font-size:14px; }
+@media (max-width:700px) {
+  .list thead { display:none; }
+  .list tr { display:block; padding:8px 4px; border-bottom:1px solid var(--line); }
+  .list td { display:flex; justify-content:space-between; gap:12px; border:0; padding:3px 10px; text-align:right; }
+  .list td::before { content:attr(data-l); color:var(--muted); font-size:13px; text-align:left; }
+}
+.sizes tbody { border-top:2px solid var(--line); }
+.sizes tr.item td { font-weight:600; background:#fafbfc; }
+.sizes tr.size td:first-child { padding-left:28px; color:var(--muted); }
+.sizes tbody tr { cursor:default; }
+@media (max-width:700px) {
+  .sizes tr.size { padding:2px 4px 2px 18px; }
+  .sizes tr.size td:first-child { padding-left:10px; }
+}
+.list td[data-l="Date"], .list td[data-l="Next due"], .list td[data-l="Due"] { white-space:nowrap; }
+.st.cancelled { background:#eef1f5; color:var(--muted); text-decoration:line-through; }

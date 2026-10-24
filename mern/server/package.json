@@ -1,0 +1,20 @@
+{
+  "name": "snj-orders-server",
+  "private": true,
+  "description": "SNJ Orders website server: Express + MongoDB",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "cookie-session": "2.1.1",
+    "express": "5.3.0",
+    "mongoose": "9.11.4"
+  },
+  "devDependencies": {
+    "mongodb-memory-server": "11.3.0",
+    "supertest": "7.3.1"
+  }
+}
