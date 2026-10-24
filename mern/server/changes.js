@@ -1,11 +1,14 @@
-// New orders entered on the website: the form's lists, approval, and the bridge's queue.
+// New orders entered on the website: the form's lists, and the bridge's queue into Tally.
 const express = require("express");
 const db = require("./db");
 
+// waiting -> sending -> done | failed, or withdrawn before the bridge picks it up.
+// to_approve / approved / rejected are from when orders needed approval; approved counts as waiting.
 const STATUS_LABEL = {
-  to_approve: "Waiting for approval", approved: "Approved, waiting for Tally", sending: "Being written to Tally",
-  done: "In Tally", failed: "Failed", rejected: "Rejected", withdrawn: "Withdrawn",
+  waiting: "Waiting for Tally", sending: "Being written to Tally", done: "In Tally", failed: "Failed",
+  withdrawn: "Withdrawn", to_approve: "Waiting for approval", approved: "Waiting for Tally", rejected: "Rejected",
 };
+const WAITING = ["waiting", "approved"];
 // SNJ sells on a 50% then 20% discount chain: the amount is rate x qty x 0.4.
 const DISCOUNTS = { "50+20": 0.4, none: 1 };
 const MASTERS_MAX_AGE = 6 * 3600 * 1000;
@@ -76,10 +79,9 @@ async function move(id, from, status, by, extra = {}) {
   return c;
 }
 
-function staffRoutes({ requireLogin, approvers }) {
+function staffRoutes({ requireLogin }) {
   const r = express.Router();
   r.use(requireLogin);
-  const canApprove = (user) => !approvers.length || approvers.includes(user.username);
 
   r.get("/masters", async (req, res) => {
     const m = await db.Masters.findById("tally").lean();
@@ -92,8 +94,8 @@ function staffRoutes({ requireLogin, approvers }) {
     if (problems.length) return res.status(400).json({ detail: problems.join(" "), problems });
     const by = req.session.user.username;
     const c = await db.Change.create({
-      status: "to_approve", order, total: orderTotal(order), created_by: by,
-      history: [{ at: new Date(), by, status: "to_approve", note: "" }],
+      status: "waiting", order, total: orderTotal(order), created_by: by,
+      history: [{ at: new Date(), by, status: "waiting", note: "" }],
     });
     res.json(view(c.toObject()));
   });
@@ -104,7 +106,7 @@ function staffRoutes({ requireLogin, approvers }) {
     const pages = Math.max(1, Math.ceil(total / perPage));
     const page = Math.min(pages, Math.max(1, parseInt(req.query.page, 10) || 1));
     const list = await db.Change.find().sort({ createdAt: -1 }).skip((page - 1) * perPage).limit(perPage).lean();
-    res.json({ changes: list.map(view), can_approve: canApprove(req.session.user), total, page, pages, per_page: perPage });
+    res.json({ changes: list.map(view), total, page, pages, per_page: perPage });
   });
 
   const action = (from, status, allowed) => async (req, res) => {
@@ -116,10 +118,8 @@ function staffRoutes({ requireLogin, approvers }) {
     if (!moved) return res.status(409).json({ detail: `It is already ${STATUS_LABEL[c.status].toLowerCase()}.` });
     res.json(view(moved));
   };
-  r.post("/changes/:id/approve", action(["to_approve"], "approved", (u) => canApprove(u)));
-  r.post("/changes/:id/reject", action(["to_approve"], "rejected", (u) => canApprove(u)));
-  r.post("/changes/:id/withdraw", action(["to_approve", "approved"], "withdrawn",
-    (u, c) => canApprove(u) || c.created_by === u.username));
+  // Anyone signed in may withdraw an order until the bridge starts writing it.
+  r.post("/changes/:id/withdraw", action(["to_approve", ...WAITING], "withdrawn", () => true));
   return r;
 }
 
@@ -134,12 +134,12 @@ function bridgeRoutes({ requireBridge }) {
   });
 
   r.get("/changes", async (req, res) => {
-    const list = await db.Change.find({ status: "approved" }).sort({ createdAt: 1 }).lean();
+    const list = await db.Change.find({ status: { $in: WAITING } }).sort({ createdAt: 1 }).lean();
     res.json(list.map((c) => ({ id: String(c._id), order: c.order })));
   });
 
-  // sending only from approved, so an order is never sent twice; done/failed after sending.
-  const NEXT = { sending: ["approved"], done: ["sending"], failed: ["approved", "sending"] };
+  // sending only from waiting, so an order is never sent twice; done/failed after sending.
+  const NEXT = { sending: WAITING, done: ["sending"], failed: [...WAITING, "sending"] };
   r.post("/changes/:id", express.json(), async (req, res) => {
     const { status, error = "" } = req.body || {};
     if (!NEXT[status]) return res.status(400).json({ detail: "Unknown status." });
@@ -155,7 +155,7 @@ async function bridgeHints() {
   const m = await db.Masters.findById("tally", { updated_at: 1 }).lean();
   return {
     masters_stale: !m || Date.now() - new Date(m.updated_at).getTime() > MASTERS_MAX_AGE,
-    changes_waiting: await db.Change.countDocuments({ status: "approved" }),
+    changes_waiting: await db.Change.countDocuments({ status: { $in: WAITING } }),
   };
 }
 

@@ -6,10 +6,12 @@ import { inr, niceDate, niceTime, qty } from "../format.js";
 import Pagination from "../components/Pagination.jsx";
 import { Alert, Badge, Button, EmptyState, PageHeader, Skeleton, TopProgress } from "../components/ui.jsx";
 
-const TONE = { to_approve: "warn", approved: "info", sending: "info", done: "ok", failed: "bad",
-               rejected: "muted", withdrawn: "muted" };
-const DID = { to_approve: "entered it", approved: "approved it", sending: "started writing it into Tally",
-              done: "wrote it into Tally", failed: "could not write it", rejected: "rejected it", withdrawn: "withdrew it" };
+const TONE = { waiting: "info", sending: "info", done: "ok", failed: "bad", withdrawn: "muted",
+               to_approve: "warn", approved: "info", rejected: "muted" };
+const DID = { waiting: "entered it", sending: "started writing it into Tally", done: "wrote it into Tally",
+              failed: "could not write it", withdrawn: "withdrew it",
+              to_approve: "entered it", approved: "approved it", rejected: "rejected it" };
+const CAN_WITHDRAW = ["waiting", "to_approve", "approved"];
 
 export default function Entries() {
   const [params, setParams] = useSearchParams();
@@ -43,7 +45,7 @@ export default function Entries() {
           : (
             <div className={`entries ${loading ? "is-loading" : ""}`}>
               {data.changes.map((c) => (
-                <details className="card entry" key={c.id} open={c.status === "to_approve" || c.status === "failed"}>
+                <details className="card entry" key={c.id} open={c.status === "waiting" || c.status === "failed"}>
                   <summary>
                     <span className="entry-title"><strong>{c.order.order_no}</strong><span className="muted"> · {c.order.party}</span></span>
                     <span className="muted nowrap">{niceTime(c.created_at)} · {c.created_by}</span>
@@ -79,11 +81,7 @@ export default function Entries() {
                       ))}
                     </ol>
                     <div className="entry-actions">
-                      {data.can_approve && c.status === "to_approve" && <>
-                        <Button size="sm" loading={busy === `${c.id}:approve`} disabled={!!busy} onClick={() => act(c.id, "approve")}>Approve</Button>
-                        <Button size="sm" variant="secondary" loading={busy === `${c.id}:reject`} disabled={!!busy} onClick={() => act(c.id, "reject")}>Reject</Button>
-                      </>}
-                      {["to_approve", "approved"].includes(c.status) &&
+                      {CAN_WITHDRAW.includes(c.status) &&
                         <Button size="sm" variant="ghost" loading={busy === `${c.id}:withdraw`} disabled={!!busy} onClick={() => act(c.id, "withdraw")}>Withdraw</Button>}
                     </div>
                   </div>

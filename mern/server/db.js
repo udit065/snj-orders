@@ -30,12 +30,12 @@ const User = mongoose.model("User", new Schema({
 
 // What the order form offers, as last sent by the bridge from Tally.
 const Masters = mongoose.model("Masters", new Schema({
-  _id: String, customers: [{ _id: false, name: String, gstin: String }],
+  _id: String, customers: [{ _id: false, name: String, gstin: String, state: String }],
   items: [{ _id: false, name: String, unit: String }], updated_at: Date,
 }));
 
 // A new order entered on the website, on its way into Tally, with its history.
-// to_approve -> approved -> sending -> done | failed; or rejected / withdrawn before sending.
+// waiting -> sending -> done | failed; or withdrawn before sending (see changes.js).
 const Change = mongoose.model("Change", new Schema({
   kind: { type: String, default: "create_order" },
   status: { type: String, index: true },

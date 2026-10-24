@@ -67,7 +67,7 @@ def masters_request(tally_type, fields, company=None):
 
 
 def parse_customers(groups_root, ledgers_root):
-    """Ledgers anywhere under Sundry Debtors, with their GSTIN: the parties orders are for."""
+    """Ledgers anywhere under Sundry Debtors, with GSTIN and state: the parties orders are for."""
     parent = {}
     for g in groups_root.iter("GROUP"):
         name = (g.get("NAME") or _text(g, "NAME")).strip()
@@ -87,8 +87,12 @@ def parse_customers(groups_root, ledgers_root):
     for l in ledgers_root.iter("LEDGER"):
         name = (l.get("NAME") or _text(l, "NAME")).strip()
         if name and under_debtors(_text(l, "PARENT")):
-            out.append({"name": name, "gstin": _text(l, "PARTYGSTIN")})
+            out.append({"name": name, "gstin": _text(l, "PARTYGSTIN"), "state": _text(l, "LEDSTATENAME")})
     return sorted(out, key=lambda c: c["name"])
+
+
+def ledger_names(ledgers_root):
+    return {(l.get("NAME") or _text(l, "NAME")).strip() for l in ledgers_root.iter("LEDGER")} - {""}
 
 
 def parse_items(root):

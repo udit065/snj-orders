@@ -12,7 +12,8 @@ import fake_tally  # noqa: E402
 import tally  # noqa: E402
 import writer  # noqa: E402
 
-SETTINGS = {"sales_ledger": "Sale Central 5%", "gst_registration": "Uttar Pradesh Registration",
+SETTINGS = {"sales_ledger_local": "Sale Local 5%", "sales_ledger_central": "Sale Central 5%",
+            "gst_registration": "Uttar Pradesh Registration",
             "company_gstin": "09ABHCS0526J1Z7"}
 ORDER = {
     "order_no": "SO/W1/1", "date": "2026-10-24", "party": "Mehta & Sons", "reference": "", "narration": "By phone",
@@ -55,7 +56,7 @@ def test_envelope_is_one_priced_sales_order():
     (lambda x: x.replace("<AMOUNT>3360.00</AMOUNT><ACTUALQTY>", "<AMOUNT>3000.00</AMOUNT><ACTUALQTY>", 1), "line amount"),
 ])
 def test_unsafe_envelopes_are_refused(change, why):
-    xml = writer.build_sales_order(ORDER, "SNJ TEST", SETTINGS)
+    xml = writer.build_sales_order(ORDER, "SNJ TEST", SETTINGS, "08AAAPM1234A1Z5")
     with pytest.raises(writer.Refused, match=why):
         writer.check_envelope(change(xml))
 
@@ -63,7 +64,22 @@ def test_unsafe_envelopes_are_refused(change, why):
 def test_zero_rate_is_refused():
     bad = {**ORDER, "lines": [{**ORDER["lines"][0], "rate": 0}]}
     with pytest.raises(writer.Refused, match="rate"):
-        writer.build_sales_order(bad, "SNJ TEST", SETTINGS)
+        writer.build_sales_order(bad, "SNJ TEST", SETTINGS, "08AAAPM1234A1Z5")
+
+
+def test_sales_ledger_follows_the_customers_state():
+    ledgers = {"Sale Local 5%", "Sale Central 5%"}
+    assert writer.sales_ledger(SETTINGS, "09AAAPK1234A1Z5", "", ledgers) == ("Sale Local 5%", "Uttar Pradesh")
+    assert writer.sales_ledger(SETTINGS, "08AAAPM1234A1Z5", "", ledgers) == ("Sale Central 5%", "Rajasthan")
+    # No GSTIN (unregistered): the state on the customer's ledger decides.
+    assert writer.sales_ledger(SETTINGS, "", "Uttar Pradesh", ledgers) == ("Sale Local 5%", "Uttar Pradesh")
+    assert writer.sales_ledger(SETTINGS, "", "Bihar", ledgers)[0] == "Sale Central 5%"
+    with pytest.raises(writer.Refused, match="no GSTIN or state"):
+        writer.sales_ledger(SETTINGS, "", "", ledgers)
+    with pytest.raises(writer.Refused, match="isn't in this company"):
+        writer.sales_ledger(SETTINGS, "09AAAPK1234A1Z5", "", {"Sale Central 5%"})
+    xml = writer.build_sales_order(ORDER, "SNJ TEST", SETTINGS, "09AAAPK1234A1Z5")
+    assert "<LEDGERNAME>Sale Local 5%</LEDGERNAME>" in xml and "Sale Central" not in xml
 
 
 def test_masters_must_match_exactly():
@@ -74,13 +90,14 @@ def test_masters_must_match_exactly():
 def test_masters_and_sending(tally_url):
     customers = tally.parse_customers(tally.post(tally_url, tally.masters_request("Group", ["Name", "Parent"])),
                                       tally.post(tally_url, tally.masters_request("Ledger", ["Name"])))
-    assert customers == [{"name": "Agarwal Hosiery", "gstin": "19AAAPA1234A1Z5"},
-                         {"name": "Mehta & Sons", "gstin": "08AAAPM1234A1Z5"}]  # debtors only, sub-groups too
+    assert customers == [{"name": "Agarwal Hosiery", "gstin": "19AAAPA1234A1Z5", "state": ""},
+                         {"name": "Gupta Traders", "gstin": "", "state": "Uttar Pradesh"},
+                         {"name": "Mehta & Sons", "gstin": "08AAAPM1234A1Z5", "state": "Rajasthan"}]  # debtors only
     items = tally.parse_items(tally.post(tally_url, tally.masters_request("StockItem", ["Name", "BaseUnits"])))
     assert items[1] == {"name": "NIKER S-XL-(Doz)", "unit": "Doz"}
     assert "SNJ TEST" in tally.open_companies(tally.post(tally_url, tally.companies_request()))
 
-    xml = writer.build_sales_order(ORDER, "SNJ TEST", SETTINGS)
+    xml = writer.build_sales_order(ORDER, "SNJ TEST", SETTINGS, "08AAAPM1234A1Z5")
     assert writer.send_once(tally_url, xml) == (True, "", True)
     fake_tally.ACCEPT_IMPORTS = False
     ok, error, answered = writer.send_once(tally_url, xml)

@@ -21,8 +21,6 @@ async function main() {
     bridgeToken: process.env.BRIDGE_TOKEN || "",
     sessionSecret: process.env.SESSION_SECRET,
     httpsOnly: process.env.HTTPS_ONLY === "1",
-    // Who may approve new orders before they go to Tally: APPROVERS="sidharth,udit" (everyone if unset).
-    approvers: (process.env.APPROVERS || "").split(",").map((n) => n.trim().toLowerCase()).filter(Boolean),
   });
   const port = process.env.PORT || 8000;
   app.listen(port, () => console.log(`SNJ Orders on port ${port}`));

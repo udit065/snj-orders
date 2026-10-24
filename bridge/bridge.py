@@ -57,7 +57,9 @@ def load_config(path):
         # write_company (a test copy of the company first).
         "allow_writes": s.getboolean("allow_writes", False),
         "write_company": s.get("write_company", "").strip(),
-        "sales_ledger": s.get("sales_ledger", "Sale Central 5%"),
+        # Sales ledgers: local for customers in the company's own state, central for the rest.
+        "sales_ledger_local": s.get("sales_ledger_local", "Sale Local 5%"),
+        "sales_ledger_central": s.get("sales_ledger_central", s.get("sales_ledger", "Sale Central 5%")),
         "gst_registration": s.get("gst_registration", "Uttar Pradesh Registration"),
         "company_gstin": s.get("company_gstin", "09ABHCS0526J1Z7"),
         "state_file": os.path.join(os.path.dirname(os.path.abspath(path)), "state.json"),
@@ -163,17 +165,20 @@ def bridge_call(cfg, path, body=None):
 
 
 def read_masters(cfg, company):
-    """Customers (ledgers under Sundry Debtors) and stock items, for the order form."""
+    """Customers (ledgers under Sundry Debtors), stock items, and every ledger's name."""
     def get(kind, fields):
         return tally.post(cfg["tally_url"], tally.masters_request(kind, fields, company), cfg["timeout"])
-    customers = tally.parse_customers(get("Group", ["Name", "Parent"]),
-                                      get("Ledger", ["Name", "Parent", "PartyGSTIN"]))
+    try:
+        ledgers = get("Ledger", ["Name", "Parent", "PartyGSTIN", "LedStateName"])
+    except tally.TallyError:  # a build without the state field: GSTIN alone then decides
+        ledgers = get("Ledger", ["Name", "Parent", "PartyGSTIN"])
+    customers = tally.parse_customers(get("Group", ["Name", "Parent"]), ledgers)
     items = tally.parse_items(get("StockItem", ["Name", "BaseUnits"]))
-    return customers, items
+    return customers, items, tally.ledger_names(ledgers)
 
 
 def send_masters(cfg):
-    customers, items = read_masters(cfg, cfg["company"])
+    customers, items, _ = read_masters(cfg, cfg["company"])
     if not customers or not items:
         log.warning("Tally listed no customers or items, so the order form keeps its old lists")
         return
@@ -182,30 +187,31 @@ def send_masters(cfg):
 
 
 def write_orders(cfg):
-    """Write approved new orders from the website into Tally, each exactly once."""
+    """Write new orders from the website into Tally, each exactly once."""
     changes = bridge_call(cfg, "changes")
     if not changes:
         return
     if not cfg["allow_writes"] or not cfg["write_company"]:
-        log.info("%d approved order(s) are waiting; writing is switched off in config.ini", len(changes))
+        log.info("%d new order(s) are waiting; writing is switched off in config.ini", len(changes))
         return
     company = cfg["write_company"]
     if company not in tally.open_companies(tally.post(cfg["tally_url"], tally.companies_request(), cfg["timeout"])):
-        log.warning("%r is not open in Tally, so %d approved order(s) wait", company, len(changes))
+        log.warning("%r is not open in Tally, so %d new order(s) wait", company, len(changes))
         return
-    customers, items = read_masters(cfg, company)
-    gstins = {c["name"]: c["gstin"] for c in customers}
+    customers, items, ledgers = read_masters(cfg, company)
+    customers = {c["name"]: c for c in customers}
     items = {i["name"] for i in items}
     for ch in changes:
         order, cid = ch["order"], ch["id"]
-        missing = writer.check_masters(order, gstins, items)
+        missing = writer.check_masters(order, customers, items)
         if missing:
             bridge_call(cfg, f"changes/{cid}", {"status": "failed", "error": (
                 f"Not in Tally ({company}): {', '.join(missing)}. Nothing was sent; Tally would "
                 "have created these as new masters.")})
             continue
         try:
-            xml = writer.build_sales_order(order, company, cfg, gstins[order["party"]])
+            party = customers[order["party"]]
+            xml = writer.build_sales_order(order, company, cfg, party["gstin"], party.get("state", ""), ledgers)
         except (writer.Refused, KeyError, ValueError) as e:
             bridge_call(cfg, f"changes/{cid}", {"status": "failed", "error": f"Not sent: {e}"})
             continue

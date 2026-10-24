@@ -1,4 +1,4 @@
-// SNJ Orders website (view only): the API for the React pages, and the bridge's /api/sync.
+// SNJ Orders website: the API for the React pages, and the bridge's /api/sync.
 const crypto = require("crypto");
 const path = require("path");
 const express = require("express");
@@ -59,7 +59,7 @@ function groupByItem(lines) {
 
 const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-function createApp({ bridgeToken = "", sessionSecret, httpsOnly = false, approvers = [] } = {}) {
+function createApp({ bridgeToken = "", sessionSecret, httpsOnly = false } = {}) {
   const app = express();
   app.set("trust proxy", 1);
   app.use(cookieSession({
@@ -92,8 +92,7 @@ function createApp({ bridgeToken = "", sessionSecret, httpsOnly = false, approve
   });
 
   app.get("/api/me", requireLogin, async (req, res) => {
-    const canApprove = !approvers.length || approvers.includes(req.session.user.username);
-    res.json({ user: { ...req.session.user, can_approve: canApprove }, ...(await synced()) });
+    res.json({ user: req.session.user, ...(await synced()) });
   });
 
   app.get("/api/orders/:kind", requireLogin, async (req, res) => {
@@ -180,7 +179,7 @@ function createApp({ bridgeToken = "", sessionSecret, httpsOnly = false, approve
   });
 
   app.use("/api/bridge", bridgeRoutes({ requireBridge }));
-  app.use("/api", staffRoutes({ requireLogin, approvers }));
+  app.use("/api", staffRoutes({ requireLogin }));
 
   app.use("/api", (req, res) => res.status(404).json({ detail: "Page not found." }));
 

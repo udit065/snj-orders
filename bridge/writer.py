@@ -12,7 +12,10 @@ tally_bridge/order_importer.py learned writing orders into this same Tally:
     amount is re-worked from rate x qty x discount before sending.
   * No godown is written (Tally's "Any" is the absence of one). Each size is a
     batch carrying ORDERNO and its own ORDERDUEDATE ("1-Sep-26").
-  * Every voucher binds to the company's GST registration.
+  * Every voucher binds to the company's GST registration. Customers in the company's
+    own state get the local sales ledger, everyone else the central one; the state comes
+    from the customer's GSTIN, or the state on their ledger. If neither is known, or the
+    ledger isn't in Tally, the order is refused.
   * An order is sent exactly once. If the answer is lost after sending, it is
     marked failed with "check Tally": the order may exist, so it is never resent.
 """
@@ -65,9 +68,23 @@ def check_masters(order, customers, items):
     return missing
 
 
-def build_sales_order(order, company, settings, gstin=""):
+def sales_ledger(settings, gstin="", state="", ledgers=None):
+    """(ledger, customer's state): local inside the company's own state, central outside it."""
+    state = GST_STATES.get(gstin[:2], "") if gstin else state.strip()
+    if not state:
+        raise Refused("the customer has no GSTIN or state in Tally, so Sale Local or Sale Central "
+                      "can't be chosen; add the state to their ledger in Tally")
+    home = GST_STATES[settings["company_gstin"][:2]]
+    ledger = settings["sales_ledger_local" if state.lower() == home.lower() else "sales_ledger_central"]
+    if ledgers is not None and ledger not in ledgers:
+        raise Refused(f"the sales ledger {ledger!r} isn't in this company in Tally")
+    return ledger, state
+
+
+def build_sales_order(order, company, settings, gstin="", state="", ledgers=None):
     """The import envelope for one order from the website."""
     esc = escape
+    ledger, state = sales_ledger(settings, gstin, state, ledgers)
     d = order["date"].replace("-", "")
     inventory, total = [], 0.0
     for line in order["lines"]:
@@ -102,12 +119,11 @@ def build_sales_order(order, company, settings, gstin=""):
             f"<ACTUALQTY>{line_qty:.2f} {esc(unit)}</ACTUALQTY><BILLEDQTY>{line_qty:.2f} {esc(unit)}</BILLEDQTY>"
             + "".join(batches)
             + "<ACCOUNTINGALLOCATIONS.LIST>"
-            f"<LEDGERNAME>{esc(settings['sales_ledger'])}</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>"
+            f"<LEDGERNAME>{esc(ledger)}</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>"
             # Without REMOVEZEROENTRIES=No Tally can drop the lines and import an empty order.
             "<LEDGERFROMITEM>No</LEDGERFROMITEM><REMOVEZEROENTRIES>No</REMOVEZEROENTRIES>"
             f"<ISPARTYLEDGER>No</ISPARTYLEDGER><AMOUNT>{line_amount:.2f}</AMOUNT>"
             "</ACCOUNTINGALLOCATIONS.LIST></ALLINVENTORYENTRIES.LIST>")
-    state = GST_STATES.get(gstin[:2], "") if gstin else ""
     party = esc(order["party"])
     xml = (
         "<ENVELOPE><HEADER><VERSION>1</VERSION><TALLYREQUEST>Import</TALLYREQUEST>"
@@ -127,8 +143,8 @@ def build_sales_order(order, company, settings, gstin=""):
         f"{esc(settings['gst_registration'])}</GSTREGISTRATION>"
         f"<CMPGSTIN>{esc(settings['company_gstin'])}</CMPGSTIN>"
         + (f"<PARTYGSTIN>{esc(gstin)}</PARTYGSTIN>" if gstin else "")
-        + (f"<PLACEOFSUPPLY>{esc(state)}</PLACEOFSUPPLY><STATENAME>{esc(state)}</STATENAME>"
-           f"<CONSIGNEESTATENAME>{esc(state)}</CONSIGNEESTATENAME>" if state else "")
+        + f"<PLACEOFSUPPLY>{esc(state)}</PLACEOFSUPPLY><STATENAME>{esc(state)}</STATENAME>"
+        f"<CONSIGNEESTATENAME>{esc(state)}</CONSIGNEESTATENAME>"
         + f"<NARRATION>{esc(order.get('narration', ''))}</NARRATION>"
         + "".join(inventory)
         + f"<LEDGERENTRIES.LIST><LEDGERNAME>{party}</LEDGERNAME><ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>"

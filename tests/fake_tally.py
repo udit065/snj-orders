@@ -20,9 +20,11 @@ MASTERS = {
                  '<GROUP NAME="Debtors - Rajasthan"><PARENT>Sundry Debtors</PARENT></GROUP>'
                  '<GROUP NAME="Sundry Creditors"><PARENT>Current Liabilities</PARENT></GROUP>',
     "SNJLedgers": '<LEDGER NAME="Agarwal Hosiery"><PARENT>Sundry Debtors</PARENT><PARTYGSTIN>19AAAPA1234A1Z5</PARTYGSTIN></LEDGER>'
-                  '<LEDGER NAME="Mehta &amp; Sons"><PARENT>Debtors - Rajasthan</PARENT><PARTYGSTIN>08AAAPM1234A1Z5</PARTYGSTIN></LEDGER>'
+                  '<LEDGER NAME="Mehta &amp; Sons"><PARENT>Debtors - Rajasthan</PARENT><PARTYGSTIN>08AAAPM1234A1Z5</PARTYGSTIN><LEDSTATENAME>Rajasthan</LEDSTATENAME></LEDGER>'
+                  '<LEDGER NAME="Gupta Traders"><PARENT>Sundry Debtors</PARENT><LEDSTATENAME>Uttar Pradesh</LEDSTATENAME></LEDGER>'
                   '<LEDGER NAME="Cotton Mills"><PARENT>Sundry Creditors</PARENT></LEDGER>'
-                  '<LEDGER NAME="Sale Central 5%"><PARENT>Sales Accounts</PARENT></LEDGER>',
+                  '<LEDGER NAME="Sale Central 5%"><PARENT>Sales Accounts</PARENT></LEDGER>'
+                  '<LEDGER NAME="Sale Local 5%"><PARENT>Sales Accounts</PARENT></LEDGER>',
     "SNJStockItems": '<STOCKITEM NAME="001 SPORT BRA (28X40)-(Doz)"><BASEUNITS>Doz</BASEUNITS></STOCKITEM>'
                      '<STOCKITEM NAME="NIKER S-XL-(Doz)"><BASEUNITS>Doz</BASEUNITS></STOCKITEM>',
 }

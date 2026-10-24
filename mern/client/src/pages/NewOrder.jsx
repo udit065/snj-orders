@@ -45,7 +45,7 @@ export default function NewOrder() {
     }
   };
 
-  const header = <PageHeader title="New sales order" subtitle="It goes into Tally after someone approves it under Entries." />;
+  const header = <PageHeader title="New sales order" subtitle="It goes into Tally within about 10 minutes. Until then you can withdraw it under Entries." />;
   if (loadError) return <>{header}<Alert>{loadError}</Alert></>;
   if (!masters) return <>{header}<Card><Skeleton height={36} /><p /><Skeleton height={36} width="60%" /></Card></>;
   if (!masters.customers.length) {
@@ -126,7 +126,7 @@ export default function NewOrder() {
         <span className="spacer" />
         <span className="total">Order total <strong>₹{inr(total)}</strong></span>
         <Link to="/entries" className="btn btn-ghost">Cancel</Link>
-        <Button type="submit" loading={busy}>Send for approval</Button>
+        <Button type="submit" loading={busy}>Send to Tally</Button>
       </div>
     </form>
   );

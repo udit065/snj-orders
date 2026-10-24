@@ -1,4 +1,4 @@
-// New orders: the form's lists from the bridge, checks, approval, and the bridge's queue.
+// New orders: the form's lists from the bridge, checks, and the bridge's queue (no approval step).
 const { test, before, after, beforeEach } = require("node:test");
 const assert = require("node:assert/strict");
 const mongoose = require("mongoose");
@@ -19,7 +19,7 @@ const ORDER = {
 before(async () => {
   mongo = await MongoMemoryServer.create();
   await mongoose.connect(mongo.getUri());
-  app = createApp({ bridgeToken: "secret-token", sessionSecret: "test", approvers: ["sidharth"] });
+  app = createApp({ bridgeToken: "secret-token", sessionSecret: "test" });
 });
 
 after(async () => {
@@ -61,20 +61,16 @@ test("orders are checked against Tally's lists", async () => {
   assert.match(r.body.detail, /already used/);
 });
 
-test("an order is approved, picked up by the bridge once, and logged", async () => {
+test("a new order goes straight to the bridge's queue, is picked up once, and logged", async () => {
   await sendMasters();
   const ramesh = await signIn("ramesh");
-  const sidharth = await signIn("sidharth");
   const made = (await ramesh.post("/api/changes").send(ORDER).expect(200)).body;
-  assert.equal(made.status, "to_approve");
+  assert.equal(made.status, "waiting");
   assert.equal(made.total, 3360);  // 2400 x 3.5 x 0.4
   assert.equal(made.order.lines[0].unit, "Doz");  // unit comes from Tally's item
   await ramesh.post("/api/changes").send(ORDER).expect(400);  // same number twice
 
-  assert.deepEqual((await request(app).get("/api/bridge/changes").set(BRIDGE)).body, []);  // not approved yet
-  await ramesh.post(`/api/changes/${made.id}/approve`).expect(403);  // ramesh isn't an approver
-  await sidharth.post(`/api/changes/${made.id}/approve`).expect(200);
-  await sidharth.post(`/api/changes/${made.id}/approve`).expect(409);
+  await ramesh.post(`/api/changes/${made.id}/approve`).expect(404);  // there is no approval step
 
   const sync = await request(app).post("/api/sync").set(BRIDGE).set("Content-Type", "application/json")
     .send(JSON.stringify({ status_only: true }));
@@ -90,22 +86,22 @@ test("an order is approved, picked up by the bridge once, and logged", async () 
   await request(app).post(`/api/bridge/changes/${made.id}`).set(BRIDGE).send({ status: "done" }).expect(200);
 
   const list = (await ramesh.get("/api/changes")).body;
-  assert.equal(list.can_approve, false);
   const c = list.changes[0];
   assert.equal(c.status_label, "In Tally");
   assert.deepEqual(c.history.map((h) => [h.by, h.status]), [
-    ["ramesh", "to_approve"], ["sidharth", "approved"], ["bridge", "sending"], ["bridge", "done"]]);
+    ["ramesh", "waiting"], ["bridge", "sending"], ["bridge", "done"]]);
 });
 
 test("the bridge can report a failure, and staff can withdraw before sending", async () => {
   await sendMasters();
   const sidharth = await signIn("sidharth");
   const a = (await sidharth.post("/api/changes").send(ORDER)).body;
-  await sidharth.post(`/api/changes/${a.id}/approve`).expect(200);
   await request(app).post(`/api/bridge/changes/${a.id}`).set(BRIDGE)
     .send({ status: "failed", error: "Not in Tally (SNJ TEST): item 'X'" }).expect(200);
   const b = (await sidharth.post("/api/changes").send(ORDER).expect(200)).body;  // number is free again
-  await sidharth.post(`/api/changes/${b.id}/withdraw`).expect(200);
+  const ramesh = await signIn("ramesh");
+  await ramesh.post(`/api/changes/${b.id}/withdraw`).expect(200);  // anyone, until the bridge takes it
+  await ramesh.post(`/api/changes/${b.id}/withdraw`).expect(409);
   const list = (await sidharth.get("/api/changes")).body.changes;
   assert.deepEqual(list.map((c) => c.status), ["withdrawn", "failed"]);
   assert.match(list[1].error, /SNJ TEST/);
