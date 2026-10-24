@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
-import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { api, SignedOut } from "./api.js";
-import { niceTime } from "./format.js";
+import { useEffect, useMemo, useState } from "react";
+import { Link, Navigate, Route, Routes } from "react-router-dom";
+import { api } from "./api.js";
+import { SessionContext } from "./session.jsx";
+import AppShell from "./components/AppShell.jsx";
+import { EmptyState, Spinner } from "./components/ui.jsx";
 import Login from "./pages/Login.jsx";
 import OrderList from "./pages/OrderList.jsx";
 import OrderDetail from "./pages/OrderDetail.jsx";
@@ -11,58 +13,35 @@ import Entries from "./pages/Entries.jsx";
 export default function App() {
   const [user, setUser] = useState(undefined);  // undefined: still checking the session
   const [syncedAt, setSyncedAt] = useState(null);
-  const [kind, setKind] = useState("sales");
-  const location = useLocation();
 
   useEffect(() => {
     api("/api/me").then((d) => { setUser(d.user); setSyncedAt(d.synced_at); }).catch(() => setUser(null));
+    const signedOut = () => setUser(null);
+    window.addEventListener("snj:signed-out", signedOut);
+    return () => window.removeEventListener("snj:signed-out", signedOut);
   }, []);
+  const session = useMemo(() => ({ user, setSyncedAt }), [user]);
 
-  // Pages fetch through this, so an ended session goes back to the login page.
-  const load = useCallback(async (path) => {
-    try {
-      const d = await api(path);
-      setSyncedAt(d.synced_at);
-      return d;
-    } catch (e) {
-      if (e instanceof SignedOut) setUser(null);
-      throw e;
-    }
-  }, []);
-
-  if (user === undefined) return null;
-  if (!user) return <main><Login onSignedIn={(u) => setUser(u)} /></main>;
+  if (user === undefined) return <div className="center-screen"><Spinner label="Starting" /></div>;
+  if (!user) return <Login onSignedIn={(u) => setUser(u)} />;
 
   const signOut = async () => {
-    await api("/api/logout", { method: "POST" });
+    await api("/api/logout", { method: "POST" }).catch(() => {});
     setUser(null);
   };
-  const tab = location.pathname.startsWith("/orders/") ? location.pathname.split("/")[2]
-    : location.pathname.startsWith("/order/") ? kind : "";
 
   return (
-    <>
-      <header className="top">
-        <Link className="brand" to="/">SNJ Orders</Link>
-        <nav>
-          <Link to="/orders/sales" className={tab === "sales" ? "on" : ""}>Sales orders</Link>
-          <Link to="/orders/purchase" className={tab === "purchase" ? "on" : ""}>Purchase orders</Link>
-          <Link to="/new-order" className={location.pathname === "/new-order" ? "on" : ""}>New order</Link>
-          <Link to="/entries" className={location.pathname === "/entries" ? "on" : ""}>Entries</Link>
-        </nav>
-        <div className="who">{user.name} · <a href="#" onClick={(e) => { e.preventDefault(); signOut(); }}>Sign out</a></div>
-      </header>
-      <div className="fresh">Copied from Tally: {niceTime(syncedAt)} · changes are made in Tally, or as new orders here after approval</div>
-      <main>
+    <SessionContext.Provider value={session}>
+      <AppShell user={user} syncedAt={syncedAt} onSignOut={signOut}>
         <Routes>
           <Route path="/" element={<Navigate to="/orders/sales" replace />} />
-          <Route path="/orders/:kind" element={<OrderList load={load} />} />
-          <Route path="/order/:guid" element={<OrderDetail load={load} onKind={setKind} />} />
+          <Route path="/orders/:kind" element={<OrderList />} />
+          <Route path="/order/:guid" element={<OrderDetail />} />
           <Route path="/new-order" element={<NewOrder />} />
           <Route path="/entries" element={<Entries />} />
-          <Route path="*" element={<><p className="error">Page not found.</p><p><Link to="/">Back to orders</Link></p></>} />
+          <Route path="*" element={<EmptyState title="Page not found"><Link to="/">Back to orders</Link></EmptyState>} />
         </Routes>
-      </main>
-    </>
+      </AppShell>
+    </SessionContext.Provider>
   );
 }

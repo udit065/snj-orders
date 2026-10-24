@@ -1,74 +1,92 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useApi } from "../hooks/useApi.js";
 import { inr, niceDate } from "../format.js";
+import DataTable from "../components/DataTable.jsx";
+import Pagination from "../components/Pagination.jsx";
+import { DateRange, SearchBox, SegmentedFilter } from "../components/Filters.jsx";
+import { Alert, Badge, Card, EmptyState, PageHeader, STATUS_TONE, TopProgress } from "../components/ui.jsx";
 
-export default function OrderList({ load }) {
+export default function OrderList() {
   const { kind } = useParams();
   const [params, setParams] = useSearchParams();
-  const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
   const navigate = useNavigate();
   const sales = kind === "sales";
+  const q = params.get("q") || "";
   const status = params.get("status") || "open";
+  const from = params.get("date_from") || "";
+  const to = params.get("date_to") || "";
+  const page = Number(params.get("page")) || 1;
 
-  useEffect(() => {
-    document.title = `${sales ? "Sales" : "Purchase"} orders · SNJ Orders`;
-    setError(null);
-    load(`/api/orders/${kind}?${params}`).then(setData).catch((e) => setError(e.message));
-  }, [kind, params, load, sales]);
+  const query = new URLSearchParams({ q, status, date_from: from, date_to: to, page, per_page: 50 });
+  const { data, error, loading } = useApi(["sales", "purchase"].includes(kind) ? `/api/orders/${kind}?${query}` : null);
 
-  const submit = (e) => {
-    e.preventDefault();
-    const form = new FormData(e.target);
-    setParams(Object.fromEntries([...form].filter(([, v]) => v)));
+  useEffect(() => { document.title = `${sales ? "Sales" : "Purchase"} orders · SNJ Orders`; }, [sales]);
+  useEffect(() => { window.scrollTo({ top: 0 }); }, [page]);
+
+  // Any filter change goes back to page 1.
+  const update = (changes, keepPage = false) => {
+    const next = new URLSearchParams(params);
+    for (const [k, v] of Object.entries(changes)) (v ? next.set(k, v) : next.delete(k));
+    if (!keepPage) next.delete("page");
+    setParams(next);
   };
 
-  if (error) return <p className="error">{error}</p>;
-  if (!data) return <p className="muted">Loading…</p>;
-  const c = data.counts;
-  const options = [
-    ["open", `Not completed (${c.pending + c.partly})`], ["pending", `Pending (${c.pending})`],
-    ["partly", `Partly done (${c.partly})`], ["done", `Completed (${c.done})`],
-    ["cancelled", `Cancelled (${c.cancelled})`], ["all", "All"],
+  if (!["sales", "purchase"].includes(kind)) return <EmptyState title="Page not found" />;
+  const c = data?.counts;
+  const party = sales ? "Customer" : "Supplier";
+  const columns = [
+    { key: "date", label: "Date", render: (o) => niceDate(o.date), className: () => "nowrap" },
+    { key: "number", label: "Order no.", render: (o) => (
+      <><Link to={`/order/${encodeURIComponent(o.guid)}`} onClick={(e) => e.stopPropagation()}>{o.number}</Link>
+        {o.optional && <> <Badge tone="muted">optional</Badge></>}</>) },
+    { key: "party", label: party, className: () => "strong" },
+    { key: "items", label: "Items", align: "right" },
+    { key: "total", label: "Amount ₹", align: "right", render: (o) => inr(o.total) },
+    { key: "next_due", label: "Next due", render: (o) => niceDate(o.next_due) || "—",
+      className: (o) => `nowrap ${o.overdue ? "late" : ""}` },
+    { key: "status", label: "Status", render: (o) => <Badge tone={STATUS_TONE[o.status]}>{o.status_label}</Badge> },
   ];
 
   return (
     <>
-      <h1>{sales ? "Sales" : "Purchase"} orders</h1>
-      <form className="filters" onSubmit={submit} key={`${kind}?${params}`}>
-        <input name="q" defaultValue={params.get("q") || ""}
-               placeholder={`Search ${sales ? "customer" : "supplier"}, order no. or item`} />
-        <select name="status" defaultValue={status}>
-          {options.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
-        </select>
-        <label className="d">From <input type="date" name="date_from" defaultValue={params.get("date_from") || ""} /></label>
-        <label className="d">To <input type="date" name="date_to" defaultValue={params.get("date_to") || ""} /></label>
-        <button>Show</button>
-      </form>
-      {!data.orders.length ? <p className="muted">No orders match.</p> : (
-        <table className="list">
-          <thead><tr>
-            <th>Date</th><th>Order no.</th><th>{sales ? "Customer" : "Supplier"}</th><th className="n">Items</th>
-            <th className="n">Amount ₹</th><th>Next due</th><th>Status</th>
-          </tr></thead>
-          <tbody>
-            {data.orders.map((o) => {
-              const to = `/order/${encodeURIComponent(o.guid)}`;
-              return (
-                <tr key={o.guid} onClick={() => navigate(to)}>
-                  <td data-l="Date">{niceDate(o.date)}</td>
-                  <td data-l="Order no."><Link to={to}>{o.number}</Link>{o.optional && <> <span className="tag">optional</span></>}</td>
-                  <td data-l="Party">{o.party}</td>
-                  <td data-l="Items" className="n">{o.items}</td>
-                  <td data-l="Amount ₹" className="n">{inr(o.total)}</td>
-                  <td data-l="Next due" className={o.overdue ? "late" : ""}>{niceDate(o.next_due)}</td>
-                  <td data-l="Status"><span className={`st ${o.status}`}>{o.status_label}</span></td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      )}
+      <TopProgress active={loading} />
+      <PageHeader title={`${sales ? "Sales" : "Purchase"} orders`}
+                  subtitle={sales ? "Orders from customers and what has been dispatched against them"
+                                  : "Orders to suppliers and what has been received against them"} />
+      <Card padded={false}>
+        <div className="toolbar">
+          <SearchBox value={q} onChange={(v) => update({ q: v })}
+                     placeholder={`Search ${party.toLowerCase()}, order no. or item`} />
+          <DateRange from={from} to={to} onChange={(f, t) => update({ date_from: f, date_to: t })} />
+        </div>
+        <div className="toolbar toolbar-tabs">
+          <SegmentedFilter value={status} onChange={(v) => update({ status: v })} options={[
+            { value: "open", label: "Not completed", count: c && c.pending + c.partly },
+            { value: "pending", label: "Pending", count: c?.pending },
+            { value: "partly", label: "Partly done", count: c?.partly },
+            { value: "done", label: "Completed", count: c?.done },
+            { value: "cancelled", label: "Cancelled", count: c?.cancelled },
+            { value: "all", label: "All", count: c && c.pending + c.partly + c.done + c.cancelled },
+          ]} />
+        </div>
+        <Alert>{error}</Alert>
+        <DataTable columns={columns} rows={data?.orders} rowKey={(o) => o.guid} loading={loading}
+                   onRowClick={(o) => navigate(`/order/${encodeURIComponent(o.guid)}`)}
+                   mobileCard={(o) => (
+                     <div className="order-card">
+                       <span><Link to={`/order/${encodeURIComponent(o.guid)}`}>{o.number}</Link></span>
+                       <span><Badge tone={STATUS_TONE[o.status]}>{o.status_label}</Badge></span>
+                       <span className="oc-party">{o.party}</span>
+                       <span className="oc-meta">{niceDate(o.date)} · {o.items} item{o.items === 1 ? "" : "s"}
+                         {o.next_due && <> · due <span className={o.overdue ? "late" : ""}>{niceDate(o.next_due)}</span></>}</span>
+                       <span className="oc-amount">₹{inr(o.total)}</span>
+                     </div>
+                   )}
+                   empty={<EmptyState title="No orders match">Try another search, status or date range.</EmptyState>} />
+        {data && <Pagination page={data.page} pages={data.pages} total={data.total} perPage={data.per_page}
+                             disabled={loading} onPage={(n) => update({ page: String(n) }, true)} />}
+      </Card>
     </>
   );
 }

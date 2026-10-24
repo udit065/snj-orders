@@ -119,3 +119,26 @@ test("signing out ends the session", async () => {
   await agent.post("/api/logout").expect(200);
   await agent.get("/api/me").expect(401);
 });
+
+test("order lists come a page at a time, and dates are checked", async () => {
+  const orders = Array.from({ length: 120 }, (_, i) => ({
+    guid: `g${i}`, kind: "sales", number: `SO/${String(i).padStart(3, "0")}`,
+    date: `2026-10-${String(1 + (i % 28)).padStart(2, "0")}`, party: `Party ${i}`, voucher_type: "Sales Order",
+    total: 100, lines: [{ item: "X", size: "", qty: 1, unit: "Doz", rate: 100, amount: 100, due_date: "2026-11-01" }],
+  }));
+  await sync({ full: true, orders, fulfilments: [] });
+  const agent = await signIn();
+  let r = (await agent.get("/api/orders/sales?per_page=50")).body;
+  assert.deepEqual([r.orders.length, r.total, r.page, r.pages], [50, 120, 1, 3]);
+  r = (await agent.get("/api/orders/sales?per_page=50&page=3")).body;
+  assert.equal(r.orders.length, 20);
+  r = (await agent.get("/api/orders/sales?per_page=50&page=99")).body;
+  assert.equal(r.page, 3);  // past the end: the last page
+  // From after To is swapped; both ends count; a broken date is ignored.
+  r = (await agent.get("/api/orders/sales?date_from=2026-10-05&date_to=2026-10-03&per_page=200")).body;
+  assert.deepEqual([r.date_from, r.date_to], ["2026-10-03", "2026-10-05"]);
+  assert.ok(r.orders.every((o) => o.date >= "2026-10-03" && o.date <= "2026-10-05"));
+  assert.equal(r.total, orders.filter((o) => o.date >= "2026-10-03" && o.date <= "2026-10-05").length);
+  r = (await agent.get("/api/orders/sales?date_from=05-10-2026")).body;
+  assert.equal(r.total, 120);
+});

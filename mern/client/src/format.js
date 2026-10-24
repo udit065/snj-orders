@@ -32,3 +32,6 @@ export function niceTime(s) {
   }).formatToParts(d).map((p) => [p.type, p.value]));
   return `${parts.day} ${parts.month}, ${parts.hour}:${parts.minute} ${parts.dayPeriod.toUpperCase()}`;
 }
+
+// Today's date in India as YYYY-MM-DD (the computer's own clock may be in another zone).
+export const todayIST = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });

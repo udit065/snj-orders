@@ -1,78 +1,98 @@
-import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
+import { useApi } from "../hooks/useApi.js";
 import { inr, niceDate, niceTime, qty } from "../format.js";
+import Pagination from "../components/Pagination.jsx";
+import { Alert, Badge, Button, EmptyState, PageHeader, Skeleton, TopProgress } from "../components/ui.jsx";
 
-const BADGE = { to_approve: "pending", approved: "partly", sending: "partly", done: "done", failed: "failed",
-                rejected: "cancelled", withdrawn: "cancelled" };
+const TONE = { to_approve: "warn", approved: "info", sending: "info", done: "ok", failed: "bad",
+               rejected: "muted", withdrawn: "muted" };
+const DID = { to_approve: "entered it", approved: "approved it", sending: "started writing it into Tally",
+              done: "wrote it into Tally", failed: "could not write it", rejected: "rejected it", withdrawn: "withdrew it" };
 
 export default function Entries() {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
-
-  const refresh = useCallback(() => api("/api/changes").then(setData).catch((e) => setError(e.message)), []);
-  useEffect(() => {
-    document.title = "Entries · SNJ Orders";
-    refresh();
-  }, [refresh]);
+  const [params, setParams] = useSearchParams();
+  const page = Number(params.get("page")) || 1;
+  const { data, error, loading, reload } = useApi(`/api/changes?page=${page}`);
+  const [busy, setBusy] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  useEffect(() => { document.title = "Entries · SNJ Orders"; }, []);
 
   const act = async (id, what) => {
-    setError(null);
+    setBusy(`${id}:${what}`);
+    setActionError(null);
     try {
       await api(`/api/changes/${id}/${what}`, { method: "POST" });
     } catch (e) {
-      setError(e.message);
+      setActionError(e.message);
     }
-    refresh();
+    await reload();
+    setBusy(null);
   };
 
-  if (!data) return error ? <p className="error">{error}</p> : <p className="muted">Loading…</p>;
   return (
     <>
-      <h1>Entries</h1>
-      <p className="muted">New orders entered here, and where each one is on its way into Tally.
-        {" "}<Link to="/new-order">Enter a new order</Link></p>
-      {error && <p className="error">{error}</p>}
-      {!data.changes.length ? <p className="muted">Nothing entered yet.</p> : data.changes.map((c) => (
-        <details className="entry-card" key={c.id}>
-          <summary>
-            <span><strong>{c.order.order_no}</strong> · {c.order.party}</span>
-            <span className="n">₹{inr(c.total)}</span>
-            <span className={`st ${BADGE[c.status]}`}>{c.status_label}</span>
-          </summary>
-          {c.error && <p className="error">{c.error}</p>}
-          <p className="muted">Order date {niceDate(c.order.date)}{c.order.reference && ` · Ref ${c.order.reference}`}
-            {c.order.narration && ` · ${c.order.narration}`}</p>
-          <table className="list">
-            <thead><tr><th>Item</th><th>Size</th><th className="n">Qty</th><th className="n">Rate ₹</th><th>Discount</th><th>Due</th></tr></thead>
-            <tbody>
-              {c.order.lines.flatMap((l, i) => l.sizes.map((s, k) => (
-                <tr key={`${i}-${k}`}>
-                  <td data-l="Item">{l.item}</td><td data-l="Size">{s.size}</td>
-                  <td data-l="Qty" className="n">{qty(s.qty)} {l.unit}</td><td data-l="Rate ₹" className="n">{inr(l.rate)}</td>
-                  <td data-l="Discount">{l.discount === "none" ? "None" : "50% + 20%"}</td><td data-l="Due">{niceDate(s.due_date)}</td>
-                </tr>
-              )))}
-            </tbody>
-          </table>
-          <ul className="history">
-            {c.history.map((h, i) => (
-              <li key={i}>{niceTime(h.at)} · {h.by === "bridge" ? "Bridge" : h.by} · {
-                { to_approve: "entered it", approved: "approved it", sending: "started writing it into Tally",
-                  done: "wrote it into Tally", failed: "could not write it", rejected: "rejected it",
-                  withdrawn: "withdrew it" }[h.status]}</li>
-            ))}
-          </ul>
-          <div className="row">
-            {data.can_approve && c.status === "to_approve" && <>
-              <button onClick={() => act(c.id, "approve")}>Approve</button>
-              <button className="ghost" onClick={() => act(c.id, "reject")}>Reject</button>
-            </>}
-            {["to_approve", "approved"].includes(c.status) &&
-              <button className="ghost" onClick={() => act(c.id, "withdraw")}>Withdraw</button>}
-          </div>
-        </details>
-      ))}
+      <TopProgress active={loading} />
+      <PageHeader title="Entries" subtitle="New orders entered here, and where each one is on its way into Tally."
+                  actions={<Link to="/new-order" className="btn btn-primary">+ New order</Link>} />
+      <Alert>{error}</Alert>
+      <Alert onClose={() => setActionError(null)}>{actionError}</Alert>
+      {!data ? <div className="entries">{[1, 2, 3].map((i) => <div key={i} className="card card-pad"><Skeleton width="50%" /></div>)}</div>
+        : !data.changes.length ? <EmptyState title="Nothing entered yet"><Link to="/new-order">Enter the first order</Link></EmptyState>
+          : (
+            <div className={`entries ${loading ? "is-loading" : ""}`}>
+              {data.changes.map((c) => (
+                <details className="card entry" key={c.id} open={c.status === "to_approve" || c.status === "failed"}>
+                  <summary>
+                    <span className="entry-title"><strong>{c.order.order_no}</strong><span className="muted"> · {c.order.party}</span></span>
+                    <span className="muted nowrap">{niceTime(c.created_at)} · {c.created_by}</span>
+                    <span className="num strong">₹{inr(c.total)}</span>
+                    <Badge tone={TONE[c.status]}>{c.status_label}</Badge>
+                  </summary>
+                  <div className="entry-body">
+                    {c.error && <Alert>{c.error}</Alert>}
+                    <p className="muted">Order date {niceDate(c.order.date)}{c.order.reference && ` · Ref ${c.order.reference}`}
+                      {c.order.narration && ` · ${c.order.narration}`}</p>
+                    <div className="table-wrap">
+                      <table className="table">
+                        <thead><tr><th>Item</th><th>Size</th><th className="num">Qty</th><th className="num">Rate ₹</th><th>Discount</th><th>Due</th></tr></thead>
+                        <tbody>
+                          {c.order.lines.flatMap((l, i) => l.sizes.map((s, k) => (
+                            <tr key={`${i}-${k}`}>
+                              <td data-label="Item">{l.item}</td><td data-label="Size">{s.size || "—"}</td>
+                              <td data-label="Qty" className="num">{qty(s.qty)} {l.unit}</td>
+                              <td data-label="Rate ₹" className="num">{inr(l.rate)}</td>
+                              <td data-label="Discount">{l.discount === "none" ? "None" : "50% + 20%"}</td>
+                              <td data-label="Due" className="nowrap">{niceDate(s.due_date)}</td>
+                            </tr>
+                          )))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <ol className="timeline">
+                      {c.history.map((h, i) => (
+                        <li key={i} className={`tl-${TONE[h.status]}`}>
+                          <span className="strong">{h.by === "bridge" ? "Bridge" : h.by}</span> {DID[h.status]}
+                          <span className="muted"> · {niceTime(h.at)}</span>
+                        </li>
+                      ))}
+                    </ol>
+                    <div className="entry-actions">
+                      {data.can_approve && c.status === "to_approve" && <>
+                        <Button size="sm" loading={busy === `${c.id}:approve`} disabled={!!busy} onClick={() => act(c.id, "approve")}>Approve</Button>
+                        <Button size="sm" variant="secondary" loading={busy === `${c.id}:reject`} disabled={!!busy} onClick={() => act(c.id, "reject")}>Reject</Button>
+                      </>}
+                      {["to_approve", "approved"].includes(c.status) &&
+                        <Button size="sm" variant="ghost" loading={busy === `${c.id}:withdraw`} disabled={!!busy} onClick={() => act(c.id, "withdraw")}>Withdraw</Button>}
+                    </div>
+                  </div>
+                </details>
+              ))}
+            </div>
+          )}
+      {data && <Pagination page={data.page} pages={data.pages} total={data.total} perPage={data.per_page}
+                           disabled={loading} onPage={(n) => setParams({ page: String(n) })} />}
     </>
   );
 }

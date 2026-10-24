@@ -99,8 +99,12 @@ function staffRoutes({ requireLogin, approvers }) {
   });
 
   r.get("/changes", async (req, res) => {
-    const list = await db.Change.find().sort({ createdAt: -1 }).limit(200).lean();
-    res.json({ changes: list.map(view), can_approve: canApprove(req.session.user) });
+    const perPage = 20;
+    const total = await db.Change.countDocuments();
+    const pages = Math.max(1, Math.ceil(total / perPage));
+    const page = Math.min(pages, Math.max(1, parseInt(req.query.page, 10) || 1));
+    const list = await db.Change.find().sort({ createdAt: -1 }).skip((page - 1) * perPage).limit(perPage).lean();
+    res.json({ changes: list.map(view), can_approve: canApprove(req.session.user), total, page, pages, per_page: perPage });
   });
 
   const action = (from, status, allowed) => async (req, res) => {

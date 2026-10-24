@@ -99,7 +99,11 @@ function createApp({ bridgeToken = "", sessionSecret, httpsOnly = false, approve
   app.get("/api/orders/:kind", requireLogin, async (req, res) => {
     const { kind } = req.params;
     if (!["sales", "purchase"].includes(kind)) return res.status(404).json({ detail: "Page not found." });
-    const { q = "", status = "open", date_from = "", date_to = "" } = req.query;
+    const { q = "", status = "open" } = req.query;
+    const isDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || "");
+    let [dateFrom, dateTo] = [req.query.date_from, req.query.date_to].map((d) => (isDate(d) ? d : ""));
+    if (dateFrom && dateTo && dateFrom > dateTo) [dateFrom, dateTo] = [dateTo, dateFrom];
+    const perPage = Math.min(200, Math.max(10, parseInt(req.query.per_page, 10) || 50));
     const filter = { kind };
     // Every word must appear somewhere: "niker 38" finds "NIKER S-XL - 38".
     const words = String(q).split(/\s+/).filter(Boolean);
@@ -109,10 +113,10 @@ function createApp({ bridgeToken = "", sessionSecret, httpsOnly = false, approve
         return { $or: [{ party: re }, { number: re }, { reference: re }, { "lines.item": re }] };
       });
     }
-    if (date_from || date_to) {
+    if (dateFrom || dateTo) {
       filter.date = {};
-      if (date_from) filter.date.$gte = date_from;
-      if (date_to) filter.date.$lte = date_to;
+      if (dateFrom) filter.date.$gte = dateFrom;
+      if (dateTo) filter.date.$lte = dateTo;
     }
     const orders = await db.Order.find(filter).sort({ date: -1, number: -1 }).lean();
     const progress = await withProgress(orders, { kind });
@@ -133,7 +137,11 @@ function createApp({ bridgeToken = "", sessionSecret, httpsOnly = false, approve
         });
       }
     }
-    res.json({ orders: rows, counts, ...(await synced()) });
+    // Status needs every order's deliveries, so the page is cut after working them out.
+    const pages = Math.max(1, Math.ceil(rows.length / perPage));
+    const page = Math.min(pages, Math.max(1, parseInt(req.query.page, 10) || 1));
+    res.json({ orders: rows.slice((page - 1) * perPage, page * perPage), counts, total: rows.length,
+               page, pages, per_page: perPage, date_from: dateFrom, date_to: dateTo, ...(await synced()) });
   });
 
   app.get("/api/order/:guid", requireLogin, async (req, res) => {
