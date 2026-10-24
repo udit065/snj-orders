@@ -16,6 +16,9 @@ import fake_tally  # noqa: E402
 def tally_url():
     fake_tally.REQUESTS.clear()
     fake_tally.REJECT_RICH = False
+    import bridge
+    import tally
+    bridge._variants = list(tally.FETCH_VARIANTS)
     srv = HTTPServer(("127.0.0.1", 0), fake_tally.Handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{srv.server_port}"
@@ -87,19 +90,10 @@ def test_bridge_falls_back_to_lean_fields(tally_url):
     assert last_rich < len(reqs) - 2 and all("Narration" not in r for r in reqs[last_rich + 1:])
 
 
-def test_empty_read_leaves_website_alone(tally_url, monkeypatch):
-    import bridge
-    monkeypatch.setattr(bridge, "read_tally", lambda cfg, s, e: ([], []))
-    monkeypatch.setattr(bridge, "send", lambda *a: pytest.fail("must not send an empty snapshot"))
-    cfg = {"days_back": 120, "quick_days_back": 10, "days_ahead": 60}
-    bridge.sync_once(cfg, full=True)
-    bridge.sync_once(cfg, full=False)
-
-
 def test_website_shows_progress_by_size(tally_url, client):
     assert client.post("/api/sync", content="{}").status_code == 401
     r = post_sync(client, dt.date(2026, 9, 1), dt.date(2026, 11, 30), True, tally_url)
-    assert r.json() == {"orders": 4, "fulfilments": 4, "has_full": True}
+    assert r.json() == {"orders": 4, "fulfilments": 4, "has_full": True, "run": None}
 
     assert client.get("/orders/sales", follow_redirects=False).headers["location"] == "/login"
     assert "Wrong username" in client.post("/login", data={"username": "ramesh", "password": "nope"}).text
@@ -143,33 +137,109 @@ def test_quick_sync_replaces_only_recent_days(tally_url, client):
                       synced_at="2026-10-17T11:00:00+05:30")
     finally:
         bridge.read_tally = real
-    assert r.json() == {"orders": 0, "fulfilments": 4, "has_full": True}
+    assert r.json() == {"orders": 0, "fulfilments": 4, "has_full": True, "run": None}
     page = client.get("/orders/sales?status=all").text
     assert "Mehta" not in page and "Agarwal" in page and "11:00 AM" in page
     assert "GST Sales SNJ/26-27/2201" in client.get("/order/g-so-1").text
 
 
-def test_bridge_send_is_compressed_and_flags_missing_full_copy(tally_url, client, monkeypatch):
-    import bridge
+@pytest.fixture()
+def site(tally_url, client, tmp_path, monkeypatch):
+    """The bridge talking to the test website; returns its config and a log of what it sent."""
+    import gzip
     import urllib.request
 
     real_urlopen = urllib.request.urlopen
+    sent = []
 
     def via_test_client(req, timeout):
         if req.full_url.startswith(tally_url):
             return real_urlopen(req, timeout=timeout)
+        assert req.get_header("Content-encoding") == "gzip"
+        sent.append(json.loads(gzip.decompress(req.data)))
         r = client.post("/api/sync", content=req.data, headers=dict(req.header_items()))
+        assert r.status_code == 200, r.text
         class Resp:
             def __enter__(self): return self
             def __exit__(self, *a): pass
             def read(self): return r.content
-        assert r.status_code == 200, r.text
         return Resp()
     monkeypatch.setattr(urllib.request, "urlopen", via_test_client)
     cfg = {**CFG, "tally_url": tally_url, "website_url": "http://site", "token": "secret-token",
-           "days_back": 400, "quick_days_back": 400, "days_ahead": 60}
-    assert bridge.sync_once(cfg, full=False)["has_full"] is False  # fresh site: bridge must send a full copy
-    assert bridge.sync_once(cfg, full=True)["has_full"] is True
+           "days_back": 400, "quick_days_back": 10, "days_ahead": 60, "full_sync_hour": 2,
+           "state_file": str(tmp_path / "state.json")}
+    client.post("/login", data={"username": "ramesh", "password": "password123"})
+    return cfg, sent
+
+
+def test_full_copy_goes_week_by_week_and_finishes(site, client):
+    import bridge
+    import db
+    cfg, sent = site
+    bridge.run_round(cfg)
+    assert sent[0]["full"] is False and sent[1]["start_full"]  # quick sync first, then the full copy
+    weeks = [m for m in sent if "orders" in m][1:]
+    assert all((dt.date.fromisoformat(m["to"]) - dt.date.fromisoformat(m["from"])).days <= 6 for m in weeks)
+    assert sent[-1]["complete"] and db.has_full()
+    assert "Agarwal" in client.get("/orders/sales?status=all").text
+    state = bridge.load_state(cfg)
+    assert state["last_full"] == dt.date.today().isoformat() and "full" not in state
+
+    # The next round only does the quick sync.
+    sent.clear()
+    bridge.run_round(cfg)
+    assert len(sent) == 1 and sent[0]["from"] == (dt.date.today() - dt.timedelta(days=10)).isoformat()
+
+
+def test_full_copy_carries_on_after_being_cut_off(site, client, monkeypatch):
+    import bridge
+    import db
+    cfg, sent = site
+    real, calls = bridge.read_chunk, []
+    quick_weeks = len(list(bridge.chunks(cfg, *bridge.window(cfg, full=False))))
+
+    def dies_after_some_weeks(*a):
+        calls.append(a)
+        if len(calls) == quick_weeks + 60:  # past the 12 Oct week
+            raise ConnectionResetError("remote session closed")
+        return real(*a)
+    monkeypatch.setattr(bridge, "read_chunk", dies_after_some_weeks)
+    with pytest.raises(ConnectionResetError):
+        bridge.run_round(cfg)
+    reached = bridge.load_state(cfg)["full"]["next"]
+    assert not db.has_full() and "Agarwal" in client.get("/orders/sales?status=all").text  # saved so far
+
+    calls.clear()
+    monkeypatch.setattr(bridge, "read_chunk", lambda *a: calls.append(a) or real(*a))
+    sent.clear()
+    bridge.run_round(cfg)
+    assert not any(m.get("start_full") for m in sent)  # carried on, didn't start over
+    assert calls[quick_weeks][2].isoformat() == reached and sent[-1]["complete"] and db.has_full()
+
+
+def test_full_copy_stops_after_its_time_and_restarts_if_site_forgets(site, client):
+    import bridge
+    import db
+    cfg, sent = site
+    bridge.run_round(cfg, minutes=0)  # only the quick sync and the start of the full copy
+    full = bridge.load_state(cfg)["full"]
+    assert full["next"] == full["from"] and not db.has_full()
+
+    db.set_meta("full_run", "")  # the free host restarted and lost everything
+    sent.clear()
+    bridge.run_round(cfg)
+    assert sent[1]["start_full"] and sent[1]["run"] != full["run"] and db.has_full()
+
+
+def test_empty_quick_read_leaves_website_alone(site, client, monkeypatch):
+    import bridge
+    cfg, sent = site
+    bridge.run_round(cfg)
+    monkeypatch.setattr(bridge, "read_tally", lambda *a: ([], []))
+    sent.clear()
+    bridge.run_round(cfg)
+    assert sent == [{"synced_at": sent[0]["synced_at"], "status_only": True}]
+    assert "Agarwal" in client.get("/orders/sales?status=all").text
 
 
 def test_staff_logins_from_environment(client):

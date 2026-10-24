@@ -2,3 +2,5 @@ __pycache__/
 *.db
 bridge/config.ini
 .env
+bridge/state.json*
+bridge/bridge.log*

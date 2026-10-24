@@ -56,19 +56,25 @@ the same way. The two programs run side by side; this one never writes to Tally.
 4. Test without sending anything, in Command Prompt:
    ```
    cd C:\snj-orders\bridge
-   python bridge.py --dry-run
+   python bridge.py --dry-run --quick
    ```
    It prints how many orders it read and the first three. Send that output back.
 5. Once the website is online, put its address and token in `config.ini` and run
    `python bridge.py --once`, then check the website.
-6. Keep it running: in Windows **Task Scheduler**, create a task "At startup" that runs
-   `python C:\snj-orders\bridge\bridge.py`.
+6. Keep it running: double-click `install-task.cmd`. It asks Windows to run
+   `bridge.py --once` every 10 minutes in the background (no window, no admin rights
+   needed), so it carries on when the remote connection drops. What it does goes in
+   `bridge.log`. Remove it with `schtasks /delete /tn "SNJ Orders Bridge" /f`.
+   It can read Tally only while TallyPrime is open with the company loaded.
 
 Reading SNJ's full 6 months (2,300+ orders, 60,000 delivery lines) takes about 12 minutes,
-so the bridge does that once when it starts and once a night after `full_sync_hour`.
-Every 15 minutes in between it does a quick sync of only the last `quick_days_back` days
-(10 by default): new orders, edits and deliveries all land there. `--quick` with `--dry-run`
-or `--once` tries a quick sync by hand.
+longer than a remote session reliably stays connected. So every round first re-reads the
+last `quick_days_back` days (10 by default: new orders, edits and deliveries all land
+there), then spends up to `minutes_per_round` minutes on the full copy, a week at a time.
+Each week is saved on the website as it is sent, and where it got to is kept in
+`state.json`, so the next round carries on from there. A full copy is made at the start
+and once a night after `full_sync_hour`, and again whenever the website has lost its copy
+(free hosting forgets its data when it restarts).
 
 Orders whose number contains "CANCEL" (SNJ's way of cancelling, e.g. `SO/D5/123 R(CANCEL)`)
 show as Cancelled and are hidden from the default list.

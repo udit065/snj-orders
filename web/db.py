@@ -87,6 +87,28 @@ def replace_all(orders, fulfilments, synced_at, date_from=None, date_to=None):
             c.execute("INSERT OR REPLACE INTO meta VALUES ('full_synced_at', ?)", (synced_at,))
 
 
+def finish_full(date_from, date_to, synced_at):
+    """A full copy has arrived week by week; drop whatever lies outside its period."""
+    with connect() as c:
+        c.execute("DELETE FROM order_lines WHERE order_guid IN "
+                  "(SELECT guid FROM orders WHERE date < ? OR date > ?)", (date_from, date_to))
+        c.execute("DELETE FROM orders WHERE date < ? OR date > ?", (date_from, date_to))
+        c.execute("DELETE FROM fulfilments WHERE date < ? OR date > ?", (date_from, date_to))
+        c.execute("INSERT OR REPLACE INTO meta VALUES ('synced_at', ?)", (synced_at,))
+        c.execute("INSERT OR REPLACE INTO meta VALUES ('full_synced_at', ?)", (synced_at,))
+
+
+def get_meta(key):
+    with connect() as c:
+        row = c.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+    return row["value"] if row else None
+
+
+def set_meta(key, value):
+    with connect() as c:
+        c.execute("INSERT OR REPLACE INTO meta VALUES (?, ?)", (key, value))
+
+
 def has_full():
     with connect() as c:
         return c.execute("SELECT 1 FROM meta WHERE key='full_synced_at'").fetchone() is not None

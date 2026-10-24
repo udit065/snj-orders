@@ -225,14 +225,22 @@ async def sync(request: Request):
     if request.headers.get("content-encoding") == "gzip":
         body = gzip.decompress(body)
     data = json.loads(body)
-    if data.get("full", True):
-        db.replace_all(data["orders"], data["fulfilments"], data["synced_at"])
-    else:
-        db.replace_all(data["orders"], data["fulfilments"], data["synced_at"], data["from"], data["to"])
-    # has_full tells the bridge whether a full copy is here; after a restart on free
-    # hosting it isn't, and the bridge sends one straight away.
-    return {"orders": len(data["orders"]), "fulfilments": len(data["fulfilments"]),
-            "has_full": db.has_full()}
+    # A full copy comes a week at a time: "start_full", then the weeks, then "complete".
+    # Each week is saved as it arrives, so a dropped connection loses at most one week.
+    if data.get("start_full"):
+        db.set_meta("full_run", data["run"])
+    elif data.get("complete"):
+        if data.get("run") == db.get_meta("full_run"):
+            db.finish_full(data["from"], data["to"], data["synced_at"])
+    elif "orders" in data:
+        if data.get("full", True):
+            db.replace_all(data["orders"], data["fulfilments"], data["synced_at"])
+        else:
+            db.replace_all(data["orders"], data["fulfilments"], data["synced_at"], data["from"], data["to"])
+    # has_full and run tell the bridge whether a full copy (or the part-sent one) is here;
+    # after a restart on free hosting it isn't, and the bridge starts one straight away.
+    return {"orders": len(data.get("orders", [])), "fulfilments": len(data.get("fulfilments", [])),
+            "has_full": db.has_full(), "run": db.get_meta("full_run")}
 
 
 @app.exception_handler(HTTPException)
