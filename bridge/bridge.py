@@ -28,6 +28,7 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import tally  # noqa: E402
+import writer  # noqa: E402
 
 log = logging.getLogger("bridge")
 
@@ -52,6 +53,13 @@ def load_config(path):
         "minutes_per_round": s.getint("minutes_per_round", 7),
         "quick_days_back": s.getint("quick_days_back", 10),
         "full_sync_hour": s.getint("full_sync_hour", 2),
+        # Writing new orders into Tally: off unless allow_writes = yes, and then only into
+        # write_company (a test copy of the company first).
+        "allow_writes": s.getboolean("allow_writes", False),
+        "write_company": s.get("write_company", "").strip(),
+        "sales_ledger": s.get("sales_ledger", "Sale Central 5%"),
+        "gst_registration": s.get("gst_registration", "Uttar Pradesh Registration"),
+        "company_gstin": s.get("company_gstin", "09ABHCS0526J1Z7"),
         "state_file": os.path.join(os.path.dirname(os.path.abspath(path)), "state.json"),
     }
 
@@ -143,6 +151,71 @@ def send_window(cfg, orders, fulfilments, start, end):
                       "orders": orders, "fulfilments": fulfilments})
 
 
+def bridge_call(cfg, path, body=None):
+    """The website's /api/bridge endpoints: masters for the order form, and new orders."""
+    req = urllib.request.Request(
+        cfg["website_url"] + "/api/bridge/" + path,
+        data=None if body is None else json.dumps(body).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Authorization": f'Bearer {cfg["token"]}'},
+    )
+    with urllib.request.urlopen(req, timeout=300) as resp:
+        return json.loads(resp.read())
+
+
+def read_masters(cfg, company):
+    """Customers (ledgers under Sundry Debtors) and stock items, for the order form."""
+    def get(kind, fields):
+        return tally.post(cfg["tally_url"], tally.masters_request(kind, fields, company), cfg["timeout"])
+    customers = tally.parse_customers(get("Group", ["Name", "Parent"]),
+                                      get("Ledger", ["Name", "Parent", "PartyGSTIN"]))
+    items = tally.parse_items(get("StockItem", ["Name", "BaseUnits"]))
+    return customers, items
+
+
+def send_masters(cfg):
+    customers, items = read_masters(cfg, cfg["company"])
+    if not customers or not items:
+        log.warning("Tally listed no customers or items, so the order form keeps its old lists")
+        return
+    bridge_call(cfg, "masters", {"customers": customers, "items": items})
+    log.info("Sent %d customers and %d items for the order form", len(customers), len(items))
+
+
+def write_orders(cfg):
+    """Write approved new orders from the website into Tally, each exactly once."""
+    changes = bridge_call(cfg, "changes")
+    if not changes:
+        return
+    if not cfg["allow_writes"] or not cfg["write_company"]:
+        log.info("%d approved order(s) are waiting; writing is switched off in config.ini", len(changes))
+        return
+    company = cfg["write_company"]
+    if company not in tally.open_companies(tally.post(cfg["tally_url"], tally.companies_request(), cfg["timeout"])):
+        log.warning("%r is not open in Tally, so %d approved order(s) wait", company, len(changes))
+        return
+    customers, items = read_masters(cfg, company)
+    gstins = {c["name"]: c["gstin"] for c in customers}
+    items = {i["name"] for i in items}
+    for ch in changes:
+        order, cid = ch["order"], ch["id"]
+        missing = writer.check_masters(order, gstins, items)
+        if missing:
+            bridge_call(cfg, f"changes/{cid}", {"status": "failed", "error": (
+                f"Not in Tally ({company}): {', '.join(missing)}. Nothing was sent; Tally would "
+                "have created these as new masters.")})
+            continue
+        try:
+            xml = writer.build_sales_order(order, company, cfg, gstins[order["party"]])
+        except (writer.Refused, KeyError, ValueError) as e:
+            bridge_call(cfg, f"changes/{cid}", {"status": "failed", "error": f"Not sent: {e}"})
+            continue
+        # Marked as being sent first, so it can never be picked up and sent twice.
+        bridge_call(cfg, f"changes/{cid}", {"status": "sending"})
+        ok, error, _ = writer.send_once(cfg["tally_url"], xml, cfg["timeout"])
+        bridge_call(cfg, f"changes/{cid}", {"status": "done"} if ok else {"status": "failed", "error": error})
+        log.info("Order %s for %s: %s", order["order_no"], order["party"], "written into Tally" if ok else error)
+
+
 def load_state(cfg):
     try:
         with open(cfg["state_file"], encoding="utf-8") as f:
@@ -179,6 +252,12 @@ def run_round(cfg, minutes=None):
     state = load_state(cfg)
     types = voucher_types(cfg)
     site = quick_sync(cfg, types)
+    for step, needed in ((send_masters, site.get("masters_stale")), (write_orders, site.get("changes_waiting"))):
+        if needed:
+            try:
+                step(cfg)
+            except (tally.TallyError, OSError, ValueError) as e:
+                log.error("%s failed: %s", step.__name__.replace("_", " ").capitalize(), e)
 
     full = state.get("full")
     if full and site.get("run") != full["run"]:

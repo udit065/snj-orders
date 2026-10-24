@@ -5,6 +5,8 @@ import { niceTime } from "./format.js";
 import Login from "./pages/Login.jsx";
 import OrderList from "./pages/OrderList.jsx";
 import OrderDetail from "./pages/OrderDetail.jsx";
+import NewOrder from "./pages/NewOrder.jsx";
+import Entries from "./pages/Entries.jsx";
 
 export default function App() {
   const [user, setUser] = useState(undefined);  // undefined: still checking the session
@@ -35,7 +37,8 @@ export default function App() {
     await api("/api/logout", { method: "POST" });
     setUser(null);
   };
-  const tab = location.pathname.startsWith("/orders/") ? location.pathname.split("/")[2] : kind;
+  const tab = location.pathname.startsWith("/orders/") ? location.pathname.split("/")[2]
+    : location.pathname.startsWith("/order/") ? kind : "";
 
   return (
     <>
@@ -44,15 +47,19 @@ export default function App() {
         <nav>
           <Link to="/orders/sales" className={tab === "sales" ? "on" : ""}>Sales orders</Link>
           <Link to="/orders/purchase" className={tab === "purchase" ? "on" : ""}>Purchase orders</Link>
+          <Link to="/new-order" className={location.pathname === "/new-order" ? "on" : ""}>New order</Link>
+          <Link to="/entries" className={location.pathname === "/entries" ? "on" : ""}>Entries</Link>
         </nav>
         <div className="who">{user.name} · <a href="#" onClick={(e) => { e.preventDefault(); signOut(); }}>Sign out</a></div>
       </header>
-      <div className="fresh">Copied from Tally: {niceTime(syncedAt)} · view only, changes are made in Tally</div>
+      <div className="fresh">Copied from Tally: {niceTime(syncedAt)} · changes are made in Tally, or as new orders here after approval</div>
       <main>
         <Routes>
           <Route path="/" element={<Navigate to="/orders/sales" replace />} />
           <Route path="/orders/:kind" element={<OrderList load={load} />} />
           <Route path="/order/:guid" element={<OrderDetail load={load} onKind={setKind} />} />
+          <Route path="/new-order" element={<NewOrder />} />
+          <Route path="/entries" element={<Entries />} />
           <Route path="*" element={<><p className="error">Page not found.</p><p><Link to="/">Back to orders</Link></p></>} />
         </Routes>
       </main>

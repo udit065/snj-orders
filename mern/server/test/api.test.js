@@ -51,7 +51,8 @@ test("bridge token is required", async () => {
 
 test("orders show what is sent and left, by size", async () => {
   const r = await sync({ full: true, ...sample }).expect(200);
-  assert.deepEqual(r.body, { orders: 4, fulfilments: 4, has_full: true, run: null });
+  assert.deepEqual(r.body, { orders: 4, fulfilments: 4, has_full: true, run: null,
+                            masters_stale: true, changes_waiting: 0 });
 
   await request(app).get("/api/orders/sales").expect(401);
   await request(app).post("/api/login").send({ username: "ramesh", password: "nope" }).expect(401);
@@ -100,7 +101,8 @@ test("a quick sync replaces only its own days", async () => {
 
 test("a full copy arrives month by month and only counts once complete", async () => {
   let r = await sync({ start_full: true, run: "run-1" });
-  assert.deepEqual(r.body, { orders: 0, fulfilments: 0, has_full: false, run: "run-1" });
+  assert.deepEqual(r.body, { orders: 0, fulfilments: 0, has_full: false, run: "run-1",
+                            masters_stale: true, changes_waiting: 0 });
   await db.Order.create({ guid: "old", kind: "sales", number: "OLD/1", date: "2025-01-01", party: "Gone", lines: [] });
   await sync({ full: false, from: "2026-09-01", to: "2026-11-30", ...sample });
   r = await sync({ complete: true, run: "stale-run", from: "2026-06-01", to: "2026-12-31" });

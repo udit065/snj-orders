@@ -48,3 +48,19 @@ table.list { width:100%; border-collapse:collapse; background:var(--card); borde
 }
 .list td[data-l="Date"], .list td[data-l="Next due"], .list td[data-l="Due"] { white-space:nowrap; }
 .st.cancelled { background:#eef1f5; color:var(--muted); text-decoration:line-through; }
+button.ghost { background:var(--card) !important; color:var(--accent); border:1px solid var(--line) !important; font:inherit; padding:6px 10px; border-radius:6px; }
+button:disabled { opacity:.6; cursor:wait; }
+.entry .fields { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:12px; }
+.entry label { display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--muted); flex:1 1 160px; }
+.entry label.wide { flex:2 1 300px; }
+.entry input, .entry select { font:inherit; color:var(--ink); padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:var(--card); width:100%; }
+.entry .line { border:1px solid var(--line); border-radius:8px; background:#fbfcfd; padding:12px; margin:0 0 12px; }
+.entry .row, .entry-card .row { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin:8px 0; }
+.sizes-entry td { padding:4px 8px; } .sizes-entry tbody tr { cursor:default; }
+.entry-card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 14px; margin-bottom:10px; }
+.entry-card summary { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; cursor:pointer; }
+.entry-card summary > span:first-child { flex:1; }
+.entry-card .list { margin-top:8px; } .entry-card .list tbody tr { cursor:default; }
+.history { color:var(--muted); font-size:13px; padding-left:18px; }
+.st.failed { background:var(--badbg); color:var(--bad); }
+.entry button:not(.ghost), .entry-card button:not(.ghost) { font:inherit; padding:8px 14px; border-radius:6px; border:1px solid var(--accent); }

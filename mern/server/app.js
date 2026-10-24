@@ -4,6 +4,7 @@ const path = require("path");
 const express = require("express");
 const cookieSession = require("cookie-session");
 const db = require("./db");
+const { staffRoutes, bridgeRoutes, bridgeHints } = require("./changes");
 
 const STATUS_LABEL = { pending: "Pending", partly: "Partly done", done: "Completed", cancelled: "Cancelled" };
 
@@ -58,7 +59,7 @@ function groupByItem(lines) {
 
 const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-function createApp({ bridgeToken = "", sessionSecret, httpsOnly = false } = {}) {
+function createApp({ bridgeToken = "", sessionSecret, httpsOnly = false, approvers = [] } = {}) {
   const app = express();
   app.set("trust proxy", 1);
   app.use(cookieSession({
@@ -68,6 +69,14 @@ function createApp({ bridgeToken = "", sessionSecret, httpsOnly = false } = {}) 
 
   const requireLogin = (req, res, next) => (req.session.user ? next() : res.status(401).json({ detail: "Please sign in." }));
   const synced = async () => ({ synced_at: await db.getMeta("synced_at") });
+  const requireBridge = (req, res, next) => {
+    const auth = Buffer.from(req.get("authorization") || "");
+    const want = Buffer.from(`Bearer ${bridgeToken}`);
+    if (!bridgeToken || auth.length !== want.length || !crypto.timingSafeEqual(auth, want)) {
+      return res.status(401).json({ detail: "Bad bridge token" });
+    }
+    next();
+  };
 
   app.post("/api/login", express.json(), async (req, res) => {
     const { username = "", password = "" } = req.body || {};
@@ -83,7 +92,8 @@ function createApp({ bridgeToken = "", sessionSecret, httpsOnly = false } = {}) 
   });
 
   app.get("/api/me", requireLogin, async (req, res) => {
-    res.json({ user: req.session.user, ...(await synced()) });
+    const canApprove = !approvers.length || approvers.includes(req.session.user.username);
+    res.json({ user: { ...req.session.user, can_approve: canApprove }, ...(await synced()) });
   });
 
   app.get("/api/orders/:kind", requireLogin, async (req, res) => {
@@ -146,12 +156,7 @@ function createApp({ bridgeToken = "", sessionSecret, httpsOnly = false } = {}) 
   });
 
   // --- bridge endpoint: same messages as the Python website, so the bridge doesn't change ---
-  app.post("/api/sync", express.raw({ type: () => true, limit: "300mb" }), async (req, res) => {
-    const auth = Buffer.from(req.get("authorization") || "");
-    const want = Buffer.from(`Bearer ${bridgeToken}`);
-    if (!bridgeToken || auth.length !== want.length || !crypto.timingSafeEqual(auth, want)) {
-      return res.status(401).json({ detail: "Bad bridge token" });
-    }
+  app.post("/api/sync", requireBridge, express.raw({ type: () => true, limit: "300mb" }), async (req, res) => {
     const data = JSON.parse(req.body.toString("utf8"));  // gzip is undone by express.raw
     // A full copy comes a month at a time: "start_full", then the months, then "complete".
     if (data.start_full) {
@@ -163,8 +168,11 @@ function createApp({ bridgeToken = "", sessionSecret, httpsOnly = false } = {}) 
       else await db.replaceAll(data.orders, data.fulfilments, data.synced_at);
     }
     res.json({ orders: (data.orders || []).length, fulfilments: (data.fulfilments || []).length,
-               has_full: await db.hasFull(), run: await db.getMeta("full_run") });
+               has_full: await db.hasFull(), run: await db.getMeta("full_run"), ...(await bridgeHints()) });
   });
+
+  app.use("/api/bridge", bridgeRoutes({ requireBridge }));
+  app.use("/api", staffRoutes({ requireLogin, approvers }));
 
   app.use("/api", (req, res) => res.status(404).json({ detail: "Page not found." }));
 

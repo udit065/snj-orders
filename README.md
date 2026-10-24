@@ -9,7 +9,7 @@ It has two parts:
 
 | Part | Runs on | Does |
 |------|---------|------|
-| `bridge/` | The Tally server (Windows, next to Tally) | Every few minutes, **reads** orders from Tally on `localhost:9000` and sends them to the website. It only sends Tally *Export* requests, so it cannot change anything in Tally. |
+| `bridge/` | The Tally server (Windows, next to Tally) | Every few minutes, **reads** orders from Tally on `localhost:9000` and sends them to the website. It only sends Tally *Export* requests, unless writing new orders is switched on (see below). |
 | `web/` | Any small hosting server | Shows the orders to logged-in staff. |
 
 The bridge only makes outgoing connections, so no port is opened on the Tally server.
@@ -77,6 +77,15 @@ Each month is saved on the website as it is sent, and where it got to is kept in
 `state.json`, so the next round carries on from there. A full copy is made at the start
 and once a night after `full_sync_hour`, and again whenever the website has lost its copy
 (free hosting forgets its data when it restarts).
+
+### Writing new orders into Tally (stage 2, with the MERN website)
+
+Approved orders from the website's New order page are written into Tally by
+`bridge/writer.py`, only when `config.ini` has `allow_writes = yes`, and only into
+`write_company`. It only ever creates Sales Orders, checks names against Tally's
+masters (Tally would otherwise create new ones), re-checks every amount, and sends
+each order once: if Tally's answer is lost it says "check Tally" rather than resending.
+The format follows what the Frappe connector's `order_importer.py` learned on this Tally.
 
 Orders whose number contains "CANCEL" (SNJ's way of cancelling, e.g. `SO/D5/123 R(CANCEL)`)
 show as Cancelled and are hidden from the default list.

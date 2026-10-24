@@ -20,6 +20,18 @@ Data lives in MongoDB, so it survives restarts (unlike the free Render disk the 
 | `SESSION_SECRET` | Long random text that signs the login cookie |
 | `STAFF_LOGINS` | `name:password,name2:password2` (passwords of 8+ characters), re-created at every start |
 | `HTTPS_ONLY` | `1` when served over HTTPS (Render) |
+| `APPROVERS` | Usernames who may approve new orders, e.g. `sidharth,udit` (everyone if not set) |
+
+## New orders (stage 2)
+
+Staff enter a sales order under **New order**: customer and items come from Tally's own
+lists (the bridge sends them every 6 hours), with sizes, quantities, due dates, rate and
+discount (SNJ's 50% + 20%, or none). It waits under **Entries** until an approver approves
+it. The bridge then writes it into Tally once, and Entries shows each step and who took it.
+
+The bridge only writes when its `config.ini` says `allow_writes = yes`, and only into
+`write_company` (a test copy of the company first). See `bridge/writer.py` for the
+safety checks.
 
 ## Host it for free: MongoDB Atlas + Render
 

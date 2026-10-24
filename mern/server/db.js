@@ -28,6 +28,28 @@ const User = mongoose.model("User", new Schema({
   username: { type: String, unique: true }, name: String, pw_hash: String, active: { type: Boolean, default: true },
 }));
 
+// What the order form offers, as last sent by the bridge from Tally.
+const Masters = mongoose.model("Masters", new Schema({
+  _id: String, customers: [{ _id: false, name: String, gstin: String }],
+  items: [{ _id: false, name: String, unit: String }], updated_at: Date,
+}));
+
+// A new order entered on the website, on its way into Tally, with its history.
+// to_approve -> approved -> sending -> done | failed; or rejected / withdrawn before sending.
+const Change = mongoose.model("Change", new Schema({
+  kind: { type: String, default: "create_order" },
+  status: { type: String, index: true },
+  order: {
+    order_no: String, date: String, party: String, reference: String, narration: String,
+    lines: [{ _id: false, item: String, unit: String, rate: Number, discount: String,
+              sizes: [{ _id: false, size: String, qty: Number, due_date: String }] }],
+  },
+  total: Number,
+  created_by: String,
+  error: String,
+  history: [{ _id: false, at: Date, by: String, status: String, note: String }],
+}, { timestamps: true }));
+
 function toOrder(o) {
   return {
     guid: o.guid, kind: o.kind, number: o.number, date: o.date, party: o.party, voucher_type: o.voucher_type,
@@ -109,5 +131,5 @@ async function authenticate(username, password) {
 }
 
 module.exports = {
-  Order, Fulfilment, User, setMeta, getMeta, replaceAll, finishFull, hasFull, setUser, authenticate,
+  Order, Fulfilment, User, Masters, Change, setMeta, getMeta, replaceAll, finishFull, hasFull, setUser, authenticate,
 };

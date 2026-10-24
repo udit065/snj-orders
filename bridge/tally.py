@@ -46,6 +46,60 @@ def voucher_types_request(company=None):
     return _envelope("SNJVchTypes", tdl, company=company)
 
 
+def companies_request():
+    tdl = ('<COLLECTION NAME="SNJCompanies" ISMODIFY="No"><TYPE>Company</TYPE>'
+           "<NATIVEMETHOD>Name</NATIVEMETHOD></COLLECTION>")
+    return _envelope("SNJCompanies", tdl)
+
+
+def open_companies(root):
+    # Strip: a trailing space in a name would make exact matches fail invisibly.
+    return [(c.get("NAME") or _text(c, "NAME")).strip() for c in root.iter("COMPANY")
+            if (c.get("NAME") or _text(c, "NAME")).strip()]
+
+
+def masters_request(tally_type, fields, company=None):
+    """Groups, ledgers or stock items, with the given fields."""
+    coll = f"SNJ{tally_type}s"
+    methods = "".join(f"<NATIVEMETHOD>{f}</NATIVEMETHOD>" for f in fields)
+    tdl = f'<COLLECTION NAME="{coll}" ISMODIFY="No"><TYPE>{tally_type}</TYPE>{methods}</COLLECTION>'
+    return _envelope(coll, tdl, company)
+
+
+def parse_customers(groups_root, ledgers_root):
+    """Ledgers anywhere under Sundry Debtors, with their GSTIN: the parties orders are for."""
+    parent = {}
+    for g in groups_root.iter("GROUP"):
+        name = (g.get("NAME") or _text(g, "NAME")).strip()
+        if name:
+            parent[name] = _text(g, "PARENT")
+
+    def under_debtors(group):
+        seen = set()
+        while group and group not in seen:
+            if group == "Sundry Debtors":
+                return True
+            seen.add(group)
+            group = parent.get(group, "")
+        return False
+
+    out = []
+    for l in ledgers_root.iter("LEDGER"):
+        name = (l.get("NAME") or _text(l, "NAME")).strip()
+        if name and under_debtors(_text(l, "PARENT")):
+            out.append({"name": name, "gstin": _text(l, "PARTYGSTIN")})
+    return sorted(out, key=lambda c: c["name"])
+
+
+def parse_items(root):
+    out = []
+    for i in root.iter("STOCKITEM"):
+        name = (i.get("NAME") or _text(i, "NAME")).strip()
+        if name:
+            out.append({"name": name, "unit": _text(i, "BASEUNITS")})
+    return sorted(out, key=lambda i: i["name"])
+
+
 # On SNJ's TallyPrime 7 (Edit Log) a voucher collection answers with ZERO rows,
 # and no error, if a single FETCH field is unknown to the build. So the bridge
 # tries the rich field list first and falls back to the lean one.
