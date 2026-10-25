@@ -36,7 +36,7 @@ log = logging.getLogger("bridge")
 def load_config(path):
     cfg = configparser.ConfigParser()
     if not cfg.read(path, encoding="utf-8"):
-        sys.exit(f"Config file not found: {path} (copy config.example.ini to config.ini)")
+        raise ValueError(f"config file not found: {path} (copy config.example.ini to config.ini)")
     s = cfg["bridge"]
     return {
         "tally_url": s.get("tally_url", "http://localhost:9000"),
@@ -341,8 +341,8 @@ def take_lock(cfg):
         return None
 
 
-def setup_logging(cfg):
-    handlers = [logging.handlers.RotatingFileHandler(os.path.join(os.path.dirname(cfg["state_file"]), "bridge.log"),
+def setup_logging(folder):
+    handlers = [logging.handlers.RotatingFileHandler(os.path.join(folder, "bridge.log"),
                                                      maxBytes=1_000_000, backupCount=2, encoding="utf-8")]
     if sys.stderr:  # pythonw (used by the Windows task) has no console
         handlers.append(logging.StreamHandler())
@@ -356,8 +356,13 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--quick", action="store_true", help="with --dry-run: only the last few days")
     args = ap.parse_args()
-    cfg = load_config(args.config)
-    setup_logging(cfg)
+    # Logging starts first, so a broken config.ini shows up in bridge.log (pythonw has no window).
+    setup_logging(os.path.dirname(os.path.abspath(args.config)))
+    try:
+        cfg = load_config(args.config)
+    except (configparser.Error, KeyError, ValueError) as e:
+        log.error("config.ini has a problem, so nothing ran: %s", e)
+        sys.exit(1)
     if args.dry_run:
         try:
             dry_run(cfg, full=not args.quick)

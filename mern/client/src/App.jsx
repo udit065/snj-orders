@@ -14,8 +14,9 @@ export default function App() {
   const [user, setUser] = useState(undefined);  // undefined: still checking the session
   const [syncedAt, setSyncedAt] = useState(null);
 
+  const loadMe = () => api("/api/me").then((d) => { setUser(d.user); setSyncedAt(d.synced_at); }).catch(() => setUser(null));
   useEffect(() => {
-    api("/api/me").then((d) => { setUser(d.user); setSyncedAt(d.synced_at); }).catch(() => setUser(null));
+    loadMe();
     const signedOut = () => setUser(null);
     window.addEventListener("snj:signed-out", signedOut);
     return () => window.removeEventListener("snj:signed-out", signedOut);
@@ -23,7 +24,7 @@ export default function App() {
   const session = useMemo(() => ({ user, setSyncedAt }), [user]);
 
   if (user === undefined) return <div className="center-screen"><Spinner label="Starting" /></div>;
-  if (!user) return <Login onSignedIn={(u) => setUser(u)} />;
+  if (!user) return <Login onSignedIn={loadMe} />;  // /api/me also brings the last sync time
 
   const signOut = async () => {
     await api("/api/logout", { method: "POST" }).catch(() => {});
