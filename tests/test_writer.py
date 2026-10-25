@@ -104,3 +104,12 @@ def test_masters_and_sending(tally_url):
     assert not ok and answered and "Voucher totals do not match" in error
     ok, error, answered = writer.send_once("http://127.0.0.1:1", xml)
     assert not ok and not answered and "CHECK TALLY" in error
+
+
+def test_example_config_loads_with_percent_signs(tmp_path):
+    import bridge
+    cfg = tmp_path / "config.ini"
+    cfg.write_text(open(os.path.join(ROOT, "bridge", "config.example.ini"), encoding="utf-8").read()
+                   + "\n", encoding="utf-8")
+    loaded = bridge.load_config(str(cfg))
+    assert (loaded["sales_ledger_local"], loaded["sales_ledger_central"]) == ("Sale Local 5%", "Sale Central 5%")

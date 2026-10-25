@@ -34,7 +34,7 @@ log = logging.getLogger("bridge")
 
 
 def load_config(path):
-    cfg = configparser.ConfigParser()
+    cfg = configparser.ConfigParser(interpolation=None)  # "%" is literal: "Sale Local 5%"
     if not cfg.read(path, encoding="utf-8"):
         raise ValueError(f"config file not found: {path} (copy config.example.ini to config.ini)")
     s = cfg["bridge"]
