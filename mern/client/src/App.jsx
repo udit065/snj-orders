@@ -21,6 +21,9 @@ import Payments from "./pages/portal/Payments.jsx";
 import Claims from "./pages/portal/Claims.jsx";
 import Notices from "./pages/Notices.jsx";
 import News from "./pages/News.jsx";
+import Account from "./pages/Account.jsx";
+import Accounts from "./pages/Accounts.jsx";
+import Bill from "./pages/Bill.jsx";
 
 const notFound = <Route path="*" element={<EmptyState title="Page not found"><Link to="/">Back to the start</Link></EmptyState>} />;
 
@@ -66,6 +69,8 @@ export default function App() {
             <Route path="/claims" element={<Claims />} />
             <Route path="/news" element={<News />} />
             <Route path="/catalogue" element={<Catalogue />} />
+            <Route path="/account" element={<Account />} />
+            <Route path="/bill/:id" element={<Bill />} />
             {notFound}
           </Routes>
         ) : (
@@ -81,6 +86,9 @@ export default function App() {
             <Route path="/news" element={<News />} />
             <Route path="/catalogue" element={<Catalogue />} />
             <Route path="/distributors" element={<Distributors />} />
+            <Route path="/accounts" element={<Accounts />} />
+            <Route path="/account" element={<Account />} />
+            <Route path="/bill/:id" element={<Bill />} />
             {notFound}
           </Routes>
         )}

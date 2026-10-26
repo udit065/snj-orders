@@ -95,6 +95,25 @@ Tally however short the period, because Tally checks every voucher), and tries a
 Tally answers the full one with nothing (some TallyPrime builds do that). If a read
 comes back empty, the website keeps its last copy rather than going blank.
 
+### Reading accounts (balances, bills, payments)
+
+With `read_accounts = yes` (the default) the bridge also reads, only ever with "Export"
+requests:
+
+- every 30 minutes (`accounts_every_minutes`): each customer's balance, credit limit and
+  credit days, and Tally's *Bills Receivable* report (open bills with due dates);
+- every round: Sales, Credit Note, Receipt, Debit Note, Journal and Payment vouchers of
+  the last `quick_days_back` days, with bill references, LR / transport details and the
+  bill's items;
+- once a night: the whole year again, a month at a time, from 1 April (or `accounts_from`).
+
+To see what it would send without sending anything:
+
+    python bridge.py --check-accounts
+
+If Tally doesn't give the Bills Receivable report, the website works open bills out from
+the bills each voucher settled.
+
 ## How "sent / left" is worked out
 
 SNJ keeps sizes as Tally batches, so every order line is an item and a size. Tally links

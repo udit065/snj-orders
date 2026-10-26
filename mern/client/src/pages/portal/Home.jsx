@@ -31,6 +31,10 @@ export default function Home() {
         </div>
       )}
       <div className="stats">
+        {data.account && <Stat label={t("Balance")} value={`₹${inr(Math.abs(data.account.balance))}`}>
+          <Link to="/account">{data.account.balance < 0 ? t("in your favour") : t("to pay SNJ")}</Link></Stat>}
+        {data.account && <Stat label={t("Overdue")} value={`₹${inr(data.account.overdue)}`} tone={data.account.overdue ? "late" : ""}>
+          <Link to="/account?tab=bills">{data.account.overdue ? t("see bills to pay") : t("nothing overdue")}</Link></Stat>}
         <Stat label={t("Open orders")} value={data.open_orders}>{t("not yet fully sent")}</Stat>
         <Stat label={t("Still to come")} value={`₹${inr(data.value_left)}`}>{t("{n} item sizes", { n: data.lines_left })}</Stat>
         <Stat label={t("Past their due date")} value={data.overdue_lines} tone={data.overdue_lines ? "late" : ""}>{t("item sizes")}</Stat>
@@ -57,6 +61,19 @@ export default function Home() {
           {data.lines_left > data.coming_next.length && <div className="card-link"><Link to="/my/orders">{t("See all open orders →")}</Link></div>}
         </Card>
         <div>
+          {data.account?.recent_bills.length > 0 && (
+            <Card title={t("Recent bills")} padded={false} actions={<Link to="/account?tab=bills">{t("All bills")}</Link>}>
+              <ul className="list">
+                {data.account.recent_bills.map((b) => (
+                  <li key={b.id}>
+                    <div><Link className="strong" to={`/bill/${b.id}`}>{b.number}</Link>
+                      <div className="muted small">{niceDate(b.date)}{b.ship && ` · ${[b.ship.shipped_by, b.ship.lr_no && `LR ${b.ship.lr_no}`].filter(Boolean).join(" · ")}`}</div></div>
+                    <span className="num strong">₹{inr(b.amount)}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
           <Card title={t("Recent orders")} padded={false}>
             {!data.recent_orders.length ? <EmptyState title={t("No orders yet")} /> : (
               <ul className="list">
@@ -91,7 +108,7 @@ export default function Home() {
         <Link to="/claims" className="quick-link"><span aria-hidden="true">⚠</span><span><b>{t("Report damaged or short goods")}</b><br /><span className="muted small">{t("with photos")}</span></span></Link>
       </div>
       <Contact contact={data.contact} />
-      <p className="muted small center">{t("Your balance and bills will appear here soon.")}</p>
+      {!data.account && <p className="muted small center">{t("Your balance and bills will appear here soon.")}</p>}
     </>
   );
 }

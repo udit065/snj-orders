@@ -61,8 +61,15 @@ Photos and PDFs are kept in MongoDB's file store (GridFS).
 - **Home-screen icon**: on Android choose *Add to Home screen* in Chrome's menu, on iPhone
   *Share → Add to Home Screen*; it then opens like an app.
 
-Not built yet: balance, bills and statement (the bridge must first read them from Tally),
-and signing in by a code sent to the phone.
+- **Account** (from Tally, read-only): balance, overdue, credit limit and what's still
+  available, ageing by days late, open bills with due dates, each bill as a printable copy
+  with its LR number, a statement for any dates (print or save as PDF), payments received,
+  "Your year with SNJ" month by month, and *Confirm your balance*. Staff see every customer
+  under **Accounts** (who owes, overdue, oldest late bill, confirmed or not).
+- When a receipt reaches Tally with the same amount (within ₹1) a few days around the date a
+  distributor said they paid, their payment is confirmed on its own ("In Tally: ...").
+
+Not built yet: signing in by a code sent to the phone.
 
 ## Host it for free: MongoDB Atlas + Render
 

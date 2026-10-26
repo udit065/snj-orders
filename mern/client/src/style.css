@@ -26,13 +26,13 @@ input[type="date"] { min-width: 140px; }
 
 /* --- shell --- */
 .topbar { background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 20; }
-.topbar-inner { max-width: 1200px; margin: 0 auto; padding: 0 16px; display: flex; align-items: center; gap: 24px; min-height: 56px; }
+.topbar-inner { max-width: 1400px; margin: 0 auto; padding: 0 16px; display: flex; align-items: center; gap: 16px; min-height: 56px; }
 .brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; color: var(--ink); font-size: 16px; }
 .brand:hover { text-decoration: none; }
 .brand-mark { background: var(--brand); color: #fff; font-size: 12px; letter-spacing: .04em; padding: 4px 6px; border-radius: 6px; }
 .brand-lg { font-size: 22px; } .brand-lg .brand-mark { font-size: 15px; padding: 5px 8px; }
 .nav { display: flex; gap: 2px; flex: 1; overflow-x: auto; scrollbar-width: none; }
-.nav a { padding: 8px 12px; border-radius: var(--radius-sm); color: var(--ink-2); font-weight: 500; white-space: nowrap; }
+.nav a { padding: 8px 9px; border-radius: var(--radius-sm); color: var(--ink-2); font-weight: 500; white-space: nowrap; }
 .nav a:hover { background: var(--surface-2); text-decoration: none; }
 .nav a.on { background: var(--brand-soft); color: var(--brand); }
 .user { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
@@ -304,3 +304,38 @@ input[type="date"] { min-width: 140px; }
 .contact-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .lang-btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); border-radius: 999px; padding: 4px 10px; font: inherit; font-size: 13px; cursor: pointer; }
 .lang-btn:hover { border-color: var(--brand); color: var(--brand); }
+
+/* Accounts */
+.tabs { display: flex; gap: 2px; overflow-x: auto; border-bottom: 1px solid var(--line); margin-bottom: 16px; scrollbar-width: none; }
+.tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 14px; font: inherit; font-weight: 500; color: var(--ink-2); cursor: pointer; white-space: nowrap; }
+.tabs button.on { color: var(--brand); border-bottom-color: var(--brand); }
+.ageing-bar { display: flex; height: 14px; border-radius: 999px; overflow: hidden; gap: 2px; background: var(--surface-2); }
+.ageing-bar span { min-width: 4px; }
+.ageing-ok { background: #16a34a; } .ageing-warn { background: #f59e0b; } .ageing-late { background: #ea580c; } .ageing-bad { background: #dc2626; }
+.ageing-legend { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+.dot-sm { display: inline-block; width: 9px; height: 9px; border-radius: 50%; vertical-align: middle; }
+.statement-table tbody tr.strong td { background: var(--surface-2); }
+.year-legend { display: flex; gap: 16px; font-size: 13px; color: var(--ink-2); margin-bottom: 10px; }
+.year-chart { display: flex; flex-direction: column; gap: 8px; }
+.year-row { display: grid; grid-template-columns: 36px 1fr 110px; gap: 10px; align-items: center; }
+.year-bars { display: flex; flex-direction: column; gap: 3px; }
+.year-bars span { height: 10px; border-radius: 3px; min-width: 2px; }
+.bar-billed { background: var(--brand); } .bar-paid { background: #16a34a; }
+.bill-head { display: flex; justify-content: space-between; gap: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.bill-from { font-size: 18px; font-weight: 700; }
+.bill-parties { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; padding: 14px 0; }
+.bill-totals { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; padding: 12px 0; }
+.bill-totals div { display: flex; gap: 24px; min-width: 260px; justify-content: space-between; }
+.bill-totals .strong { font-size: 16px; border-top: 1px solid var(--line); padding-top: 6px; }
+.print-only { display: none; }
+@media (max-width: 720px) { .ageing-legend { grid-template-columns: 1fr 1fr; } }
+@media print {
+  .topbar, .syncbar, .no-print, .page-actions, .back, .tabs { display: none !important; }
+  .print-only { display: block; }
+  body, .content { background: #fff; padding: 0; }
+  .card { box-shadow: none; border: 0; }
+  .statement-head { padding: 0 0 12px; } .statement-head h2 { margin: 0 0 4px; }
+}
+@media (max-width: 760px) {
+  .statement-table td.stmt-what, .statement-table tr.strong td:nth-child(2) { display: block; text-align: left; font-weight: 600; }
+}
