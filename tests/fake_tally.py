@@ -19,8 +19,8 @@ MASTERS = {
     "SNJGroups": '<GROUP NAME="Sundry Debtors"><PARENT>Current Assets</PARENT></GROUP>'
                  '<GROUP NAME="Debtors - Rajasthan"><PARENT>Sundry Debtors</PARENT></GROUP>'
                  '<GROUP NAME="Sundry Creditors"><PARENT>Current Liabilities</PARENT></GROUP>',
-    "SNJLedgers": '<LEDGER NAME="Agarwal Hosiery"><PARENT>Sundry Debtors</PARENT><PARTYGSTIN>19AAAPA1234A1Z5</PARTYGSTIN></LEDGER>'
-                  '<LEDGER NAME="Mehta &amp; Sons"><PARENT>Debtors - Rajasthan</PARENT><PARTYGSTIN>08AAAPM1234A1Z5</PARTYGSTIN><LEDSTATENAME>Rajasthan</LEDSTATENAME></LEDGER>'
+    "SNJLedgers": '<LEDGER NAME="Agarwal Hosiery"><PARENT>Sundry Debtors</PARENT><PARTYGSTIN>19AAAPA1234A1Z5</PARTYGSTIN><OPENINGBALANCE>-12000.00</OPENINGBALANCE><CLOSINGBALANCE>-14040.00</CLOSINGBALANCE><CREDITLIMIT>-50000.00</CREDITLIMIT><BILLCREDITPERIOD>30 Days</BILLCREDITPERIOD></LEDGER>'
+                  '<LEDGER NAME="Mehta &amp; Sons"><PARENT>Debtors - Rajasthan</PARENT><PARTYGSTIN>08AAAPM1234A1Z5</PARTYGSTIN><LEDSTATENAME>Rajasthan</LEDSTATENAME><CLOSINGBALANCE>500.00</CLOSINGBALANCE></LEDGER>'
                   '<LEDGER NAME="Gupta Traders"><PARENT>Sundry Debtors</PARENT><LEDSTATENAME>Uttar Pradesh</LEDSTATENAME></LEDGER>'
                   '<LEDGER NAME="Cotton Mills"><PARENT>Sundry Creditors</PARENT></LEDGER>'
                   '<LEDGER NAME="Sale Central 5%"><PARENT>Sales Accounts</PARENT></LEDGER>'
@@ -31,8 +31,8 @@ MASTERS = {
 _VOUCHER = re.compile(r"<VOUCHER\b.*?</VOUCHER>", re.S)
 
 
-def vouchers_between(lo, hi):
-    text = open(os.path.join(HERE, "vouchers.xml"), encoding="utf-8").read()
+def vouchers_between(lo, hi, name="vouchers.xml"):
+    text = open(os.path.join(HERE, name), encoding="utf-8").read()
     keep = [v for v in _VOUCHER.findall(text) if lo <= re.search(r"<DATE>(\d{8})</DATE>", v).group(1) <= hi]
     return "<ENVELOPE><COLLECTION>" + "".join(keep) + "</COLLECTION></ENVELOPE>"
 
@@ -49,6 +49,11 @@ class Handler(BaseHTTPRequestHandler):
                 out = "<RESPONSE><CREATED>0</CREATED><LINEERROR>Voucher totals do not match!</LINEERROR></RESPONSE>"
         elif "<TALLYREQUEST>Export</TALLYREQUEST>" not in body:
             out = "<RESPONSE><LINEERROR>Only export allowed in tests</LINEERROR></RESPONSE>"
+        elif "Bills Receivable" in body:
+            out = open(os.path.join(HERE, "bills.xml"), encoding="utf-8").read()
+        elif "SNJAccounts" in body:
+            lo, hi = re.findall(r'\$\$Date:"(\d{8})"', body)
+            out = vouchers_between(lo, hi, "accounts.xml")
         elif "SNJCompanies" in body:
             out = "<ENVELOPE>" + "".join(f'<COMPANY NAME="{c}"/>' for c in COMPANIES) + "</ENVELOPE>"
         elif any(k in body for k in MASTERS):

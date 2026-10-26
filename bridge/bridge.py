@@ -6,6 +6,7 @@ outgoing connections to the website, so no port is opened on the server.
     python bridge.py --once     # one round: recent days, plus a few minutes of the full copy
     python bridge.py            # keep doing rounds every few minutes
     python bridge.py --dry-run  # read Tally and print a summary, send nothing
+    python bridge.py --check-accounts  # read balances, bills and vouchers; print a summary, send nothing
 
 A full copy of SNJ's books takes ~12 minutes to read, longer than a remote
 session reliably stays connected. So it is sent a month at a time, with the
@@ -27,6 +28,7 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import accounts  # noqa: E402
 import tally  # noqa: E402
 import writer  # noqa: E402
 
@@ -62,6 +64,10 @@ def load_config(path):
         "sales_ledger_central": s.get("sales_ledger_central", s.get("sales_ledger", "Sale Central 5%")),
         "gst_registration": s.get("gst_registration", "Uttar Pradesh Registration"),
         "company_gstin": s.get("company_gstin", "09ABHCS0526J1Z7"),
+        # Balances, bills and payments (read only), for the distributor portal.
+        "read_accounts": s.getboolean("read_accounts", True),
+        "accounts_every_minutes": s.getint("accounts_every_minutes", 30),
+        "accounts_from": s.get("accounts_from", "").strip(),
         "state_file": os.path.join(os.path.dirname(os.path.abspath(path)), "state.json"),
     }
 
@@ -154,12 +160,13 @@ def send_window(cfg, orders, fulfilments, start, end):
 
 
 def bridge_call(cfg, path, body=None):
-    """The website's /api/bridge endpoints: masters for the order form, and new orders."""
-    req = urllib.request.Request(
-        cfg["website_url"] + "/api/bridge/" + path,
-        data=None if body is None else json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json", "Authorization": f'Bearer {cfg["token"]}'},
-    )
+    """The website's /api/bridge endpoints: masters, new orders, accounts."""
+    data = None if body is None else json.dumps(body).encode("utf-8")
+    headers = {"Content-Type": "application/json", "Authorization": f'Bearer {cfg["token"]}'}
+    if data and len(data) > 100_000:
+        data = gzip.compress(data)
+        headers["Content-Encoding"] = "gzip"
+    req = urllib.request.Request(cfg["website_url"] + "/api/bridge/" + path, data=data, headers=headers)
     with urllib.request.urlopen(req, timeout=300) as resp:
         return json.loads(resp.read())
 
@@ -225,6 +232,112 @@ def write_orders(cfg):
         log.info("Order %s for %s: %s", order["order_no"], order["party"], "written into Tally" if ok else error)
 
 
+# --- accounts: balances, open bills, invoices, payments (read only) ---------------
+
+_acct_variants = list(accounts.FETCH_VARIANTS)
+
+
+def read_balances(cfg):
+    def get(kind, fields):
+        return tally.post(cfg["tally_url"], tally.masters_request(kind, fields, cfg["company"]), cfg["timeout"])
+    groups = get("Group", ["Name", "Parent"])
+    for fields in accounts.BALANCE_FIELDS:
+        try:
+            parties = accounts.parse_balances(groups, get("Ledger", fields))
+        except tally.TallyError:
+            continue
+        if parties:
+            return parties
+    return []
+
+
+def read_bills(cfg):
+    try:
+        return accounts.parse_bills(tally.post(cfg["tally_url"], accounts.bills_request(dt.date.today(), cfg["company"]),
+                                               cfg["timeout"]))
+    except tally.TallyError as e:
+        log.warning("Tally's Bills Receivable report didn't come (%s); the website works bills out itself", e)
+        return []
+
+
+def account_types(types):
+    base = dict(types[0])
+    names = {n for n, b in base.items() if b in accounts.ACCOUNT_BASES}
+    if not names:  # Tally didn't list its voucher types: the built-in names
+        names = set(accounts.ACCOUNT_BASES)
+        base.update({n: n for n in names})
+    return base, names
+
+
+def read_account_chunk(cfg, types, customers, start, stop):
+    global _acct_variants
+    base, names = types
+    entries = []
+    for variant in _acct_variants:
+        root = tally.post(cfg["tally_url"], accounts.vouchers_request(names, start, stop, cfg["company"], variant),
+                          cfg["timeout"])
+        entries = accounts.parse_vouchers(root, base, customers)
+        if entries:
+            if len(_acct_variants) > 1:
+                log.info("Tally answers the '%s' account field list; using it from now on", variant)
+                _acct_variants = [variant]
+            break
+    return entries
+
+
+def send_accounts(cfg, entries, start, stop):
+    return bridge_call(cfg, "accounts", {"from": start.isoformat(), "to": stop.isoformat(), "entries": entries})
+
+
+def sync_accounts(cfg, state, types, deadline, allow_full=True):
+    """Balances and open bills every half hour; the last few days' vouchers every round;
+    and, a month at a time, every voucher since the start of the financial year."""
+    ac = state.setdefault("accounts", {})
+    today = dt.date.today()
+    if not ac.get("customers") or time.time() - ac.get("balances_at", 0) > cfg["accounts_every_minutes"] * 60:
+        parties = read_balances(cfg)
+        if not parties:
+            log.warning("Tally listed no customer balances, so accounts were left unchanged")
+            return
+        bills = read_bills(cfg)
+        bridge_call(cfg, "balances", {"as_of": today.isoformat(), "parties": parties, "bills": bills,
+                                      "bills_source": "tally" if bills else "none"})
+        log.info("Sent %d customer balances and %d open bills", len(parties), len(bills))
+        ac["customers"] = [p["name"] for p in parties]
+        ac["balances_at"] = time.time()
+        save_state(cfg, state)
+    customers = set(ac["customers"])
+    types = account_types(types)
+
+    start = today - dt.timedelta(days=cfg["quick_days_back"])
+    entries = read_account_chunk(cfg, types, customers, start, today)
+    if entries:
+        r = send_accounts(cfg, entries, start, today)
+        log.info("Accounts %s..%s: %d entries; %s", start, today, len(entries), r)
+    else:
+        log.info("No account vouchers for recent days, so they were left unchanged")
+
+    first = (dt.date.fromisoformat(cfg["accounts_from"]) if cfg["accounts_from"] else accounts.fy_start(today))
+    if not ac.get("next") and ac.get("last_full", "") < today.isoformat() and dt.datetime.now().hour >= cfg["full_sync_hour"]:
+        ac["next"] = first.isoformat()
+        log.info("Starting a full copy of accounts from %s, a month at a time", first)
+    while allow_full and ac.get("next") and time.monotonic() < deadline:
+        s = dt.date.fromisoformat(ac["next"])
+        if s > today:
+            ac.pop("next")
+            ac["last_full"] = today.isoformat()
+            log.info("Full copy of accounts finished")
+            break
+        e = min(s + dt.timedelta(days=cfg["days_per_request"] - 1), today)
+        entries = read_account_chunk(cfg, types, customers, s, e)
+        if entries:
+            send_accounts(cfg, entries, s, e)
+        log.info("Accounts full copy: %s..%s done (%d entries)", s, e, len(entries))
+        ac["next"] = (e + dt.timedelta(days=1)).isoformat()
+        save_state(cfg, state)
+    save_state(cfg, state)
+
+
 def load_state(cfg):
     try:
         with open(cfg["state_file"], encoding="utf-8") as f:
@@ -267,6 +380,13 @@ def run_round(cfg, minutes=None):
                 step(cfg)
             except (tally.TallyError, OSError, ValueError) as e:
                 log.error("%s failed: %s", step.__name__.replace("_", " ").capitalize(), e)
+
+    if cfg.get("read_accounts"):
+        budget = started + (minutes if minutes is not None else 60) * 60
+        try:
+            sync_accounts(cfg, state, types, budget, allow_full=not state.get("full"))
+        except (tally.TallyError, OSError, ValueError) as e:
+            log.error("Accounts failed: %s", e)
 
     full = state.get("full")
     if full and site.get("run") != full["run"]:
@@ -327,6 +447,33 @@ def dry_run(cfg, full):
               f'  ({len(o["lines"])} item/size lines)')
 
 
+def check_accounts(cfg):
+    """What the accounts part would send, printed instead of sent."""
+    started = time.monotonic()
+    parties = read_balances(cfg)
+    owing = [p for p in parties if p["closing"] > 0]
+    print(f"Customers: {len(parties)} ({len(owing)} owe money), total owed Rs {sum(p['closing'] for p in owing):,.2f}")
+    for p in sorted(owing, key=lambda p: -p["closing"])[:3]:
+        print(f"  {p['name']}: owes Rs {p['closing']:,.2f}, opening Rs {p['opening']:,.2f},"
+              f" credit limit {p['credit_limit']}, credit days {p['credit_days']}")
+    bills = read_bills(cfg)
+    print(f"Open bills (Bills Receivable report): {len(bills)}")
+    for b in bills[:3]:
+        print(f"  {b['party']}  {b['ref']}  {b['date']}  due {b['due_date']}  Rs {b['amount']:,.2f}")
+    today = dt.date.today()
+    entries = read_account_chunk(cfg, account_types(voucher_types(cfg)), {p["name"] for p in parties},
+                                 today - dt.timedelta(days=30), today)
+    kinds = {}
+    for e in entries:
+        kinds[e["base"]] = kinds.get(e["base"], 0) + 1
+    print(f"Vouchers in the last 30 days: {len(entries)} {kinds} (field list: {_acct_variants[0]})")
+    for base in sorted(kinds):
+        e = next(x for x in entries if x["base"] == base)
+        print(f"  {e['date']} {e['voucher_type']} {e['number']}  {e['party']}  Rs {e['amount']:,.2f}"
+              f"  bills {[(b['type'], b['ref']) for b in e['bills']][:2]}  transport {e['ship']}")
+    print(f"Took {time.monotonic() - started:.0f} s. Nothing was sent.")
+
+
 # --- running -----------------------------------------------------------------------
 
 def take_lock(cfg):
@@ -358,6 +505,7 @@ def main():
     ap.add_argument("--once", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--quick", action="store_true", help="with --dry-run: only the last few days")
+    ap.add_argument("--check-accounts", action="store_true", help="read balances, bills and vouchers; send nothing")
     args = ap.parse_args()
     # Logging starts first, so a broken config.ini shows up in bridge.log (pythonw has no window).
     setup_logging(os.path.dirname(os.path.abspath(args.config)))
@@ -366,6 +514,12 @@ def main():
     except (configparser.Error, KeyError, ValueError) as e:
         log.error("config.ini has a problem, so nothing ran: %s", e)
         sys.exit(1)
+    if args.check_accounts:
+        try:
+            check_accounts(cfg)
+        except tally.TallyError as e:
+            sys.exit(f"Problem: {e}")
+        return
     if args.dry_run:
         try:
             dry_run(cfg, full=not args.quick)
