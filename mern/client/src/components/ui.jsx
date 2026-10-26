@@ -106,6 +106,7 @@ export function ProgressBar({ value, max }) {
 
 // Where an order-pad photo has got to.
 export const PHOTO_TONE = { received: "warn", entered: "info", done: "ok", rejected: "bad" };
+export const NOTICE_TONE = { open: "warn", accepted: "ok", rejected: "bad" };
 
 export function Stat({ label, value, tone, children }) {
   return (

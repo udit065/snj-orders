@@ -70,6 +70,19 @@ const OrderPhoto = mongoose.model("OrderPhoto", new Schema({
   history: [{ _id: false, at: Date, by: String, status: String, note: String }],
 }, { timestamps: true }));
 
+// What a distributor tells SNJ: a payment they made, or a damage / short-supply claim.
+// Staff check it and accept or send it back; the bridge doesn't write these into Tally.
+const Notice = mongoose.model("Notice", new Schema({
+  kind: { type: String, index: true },  // payment | claim
+  party: String, username: String, note: String,
+  amount: Number, paid_on: String, mode: String, reference: String,                      // payment
+  order: { guid: String, number: String }, item: String, qty: Number, problem: String,   // claim
+  files: [{ _id: false, file_id: Schema.Types.ObjectId, content_type: String, size: Number }],
+  status: { type: String, default: "open", index: true },  // open -> accepted | rejected
+  staff_note: String,
+  history: [{ _id: false, at: Date, by: String, status: String, note: String }],
+}, { timestamps: true }));
+
 // Catalogue PDFs staff upload for distributors.
 const Catalogue = mongoose.model("Catalogue", new Schema({
   title: String, file_id: Schema.Types.ObjectId, size: Number, uploaded_by: String,
@@ -192,6 +205,6 @@ async function authenticate(username, password) {
 }
 
 module.exports = {
-  Order, Fulfilment, User, Masters, Change, OrderPhoto, Catalogue, setMeta, getMeta, replaceAll, finishFull, hasFull,
+  Order, Fulfilment, User, Masters, Change, OrderPhoto, Notice, Catalogue, setMeta, getMeta, replaceAll, finishFull, hasFull,
   setUser, setDistributor, authenticate, saveFile, sendFile, deleteFile,
 };

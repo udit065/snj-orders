@@ -17,3 +17,11 @@ export async function shrinkPhoto(file, maxSide = 1800) {
 }
 
 export const fileSize = (bytes) => (bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1e3))} KB`);
+
+// A photo as "data:image/jpeg;base64,...", to send inside a form's JSON.
+export const toDataUrl = (blob) => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(reader.result);
+  reader.onerror = () => reject(new Error("Couldn't read that photo."));
+  reader.readAsDataURL(blob);
+});

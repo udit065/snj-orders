@@ -2,11 +2,13 @@ import { NavLink } from "react-router-dom";
 import { niceTime } from "../format.js";
 
 const STAFF_NAV = [
-  { to: "/orders/sales", label: "Sales orders" },
-  { to: "/orders/purchase", label: "Purchase orders" },
+  { to: "/orders/sales", label: "Sales" },
+  { to: "/orders/purchase", label: "Purchases" },
   { to: "/new-order", label: "New order" },
   { to: "/entries", label: "Entries" },
-  { to: "/photo-orders", label: "Order requests" },
+  { to: "/photo-orders", label: "Requests" },
+  { to: "/payments", label: "Payments" },
+  { to: "/claims", label: "Claims" },
   { to: "/catalogue", label: "Catalogue" },
   { to: "/distributors", label: "Distributors" },
 ];
@@ -14,6 +16,8 @@ const DISTRIBUTOR_NAV = [
   { to: "/", label: "Home", end: true },
   { to: "/my/orders", label: "Orders" },
   { to: "/send-order", label: "Send order" },
+  { to: "/payments", label: "Payments" },
+  { to: "/claims", label: "Damage claims" },
   { to: "/catalogue", label: "Catalogue" },
 ];
 

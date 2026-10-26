@@ -40,11 +40,20 @@ Distributors sign in with their mobile number and see only their own account: op
 and what is still to come size by size (**Home**, **Orders**), photos of their order pad
 (**Send order**) and the **Catalogue**. Staff add their logins under **Distributors**,
 linking each to one or more Tally customers, enter each photo as an order from
-**Order photos** (or send it back with a reason), and upload catalogue PDFs.
+**Requests** (or send it back with a reason), and upload catalogue PDFs.
 Photos and PDFs are kept in MongoDB's file store (GridFS).
 
-Not built yet: balance, bills, statement and payments (the bridge must first read them
-from Tally), and signing in by a code sent to the phone.
+- **Order again**: from any past order a distributor can send the same items and sizes
+  again, changing quantities. It reaches staff under **Requests**; *Enter order* opens
+  New order already filled in.
+- **Payments**: a distributor says they paid (amount, date, UPI / bank / cheque and its
+  number, an optional screenshot). Staff check the bank and confirm it, or say it wasn't
+  found. Nothing is written into Tally; the receipt is still entered there by hand.
+- **Damage claims**: damaged, short or wrong goods with up to 3 photos, optionally against
+  one of their orders. Staff accept it (saying what SNJ will do, e.g. a credit note) or not.
+
+Not built yet: balance, bills and statement (the bridge must first read them from Tally),
+and signing in by a code sent to the phone.
 
 ## Host it for free: MongoDB Atlas + Render
 

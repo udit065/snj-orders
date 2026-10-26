@@ -76,7 +76,11 @@ export default function Home() {
           </Card>
         </div>
       </div>
-      <p className="muted small center">Your balance, bills and payments will appear here soon.</p>
+      <div className="quick-links">
+        <Link to="/payments" className="quick-link"><span aria-hidden="true">₹</span><span><b>Tell us you've paid</b><br /><span className="muted small">UPI, bank transfer or cheque</span></span></Link>
+        <Link to="/claims" className="quick-link"><span aria-hidden="true">⚠</span><span><b>Report damaged or short goods</b><br /><span className="muted small">with photos</span></span></Link>
+      </div>
+      <p className="muted small center">Your balance and bills will appear here soon.</p>
     </>
   );
 }

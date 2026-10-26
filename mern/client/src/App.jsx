@@ -16,6 +16,9 @@ import Home from "./pages/portal/Home.jsx";
 import MyOrders from "./pages/portal/MyOrders.jsx";
 import SendOrder from "./pages/portal/SendOrder.jsx";
 import OrderAgain from "./pages/portal/OrderAgain.jsx";
+import Payments from "./pages/portal/Payments.jsx";
+import Claims from "./pages/portal/Claims.jsx";
+import Notices from "./pages/Notices.jsx";
 
 const notFound = <Route path="*" element={<EmptyState title="Page not found"><Link to="/">Back to the start</Link></EmptyState>} />;
 
@@ -50,6 +53,8 @@ export default function App() {
             <Route path="/order/:guid" element={<OrderDetail />} />
             <Route path="/send-order" element={<SendOrder />} />
             <Route path="/order-again/:guid" element={<OrderAgain />} />
+            <Route path="/payments" element={<Payments />} />
+            <Route path="/claims" element={<Claims />} />
             <Route path="/catalogue" element={<Catalogue />} />
             {notFound}
           </Routes>
@@ -61,6 +66,8 @@ export default function App() {
             <Route path="/new-order" element={<NewOrder />} />
             <Route path="/entries" element={<Entries />} />
             <Route path="/photo-orders" element={<PhotoOrders />} />
+            <Route path="/payments" element={<Notices />} />
+            <Route path="/claims" element={<Notices />} />
             <Route path="/catalogue" element={<Catalogue />} />
             <Route path="/distributors" element={<Distributors />} />
             {notFound}
