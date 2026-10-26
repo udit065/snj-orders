@@ -30,7 +30,18 @@ export default function NewOrder() {
   const units = useMemo(() => new Map((masters?.items || []).map((i) => [i.name, i.unit])), [masters]);
   const customers = useMemo(() => new Set((masters?.customers || []).map((c) => c.name)), [masters]);
 
-  useEffect(() => { if (photo) setHead((h) => ({ ...h, party: photo.party })); }, [photo]);
+  useEffect(() => {
+    if (!photo) return;
+    setHead((h) => ({ ...h, party: photo.party, narration: h.narration || photo.note }));
+    if (photo.lines.length) {  // order again: same items and sizes, due dates for staff to fill
+      const byItem = new Map();
+      for (const l of photo.lines) {
+        if (!byItem.has(l.item)) byItem.set(l.item, { item: l.item, rate: String(l.rate || ""), discount: l.discount || "50+20", sizes: [] });
+        byItem.get(l.item).sizes.push({ size: l.size, qty: String(l.qty), due_date: "" });
+      }
+      setLines([...byItem.values()]);
+    }
+  }, [photo]);
   const setLine = (i, change) => setLines(lines.map((l, j) => (j === i ? { ...l, ...change } : l)));
   const setSize = (i, k, change) => setLine(i, { sizes: lines[i].sizes.map((s, j) => (j === k ? { ...s, ...change } : s)) });
   const total = round2(lines.reduce((t, l) => t + lineAmount(l), 0));
@@ -63,7 +74,10 @@ export default function NewOrder() {
     <form onSubmit={submit} className="order-form">
       {header}
       <Alert onClose={() => setError(null)}>{error}</Alert>
-      {photo && (
+      {photo && photo.kind === "repeat" && (
+        <Alert tone="info">Order again from {photo.party}, copied from {photo.from_order?.number}. Check the rates and add due dates.</Alert>
+      )}
+      {photo && photo.kind !== "repeat" && (
         <Card title={`Order photo from ${photo.party}`} className="photo-ref">
           <a href={`/api/photos/${photo.id}/image`} target="_blank" rel="noreferrer">
             <img src={`/api/photos/${photo.id}/image`} alt="Order pad" />

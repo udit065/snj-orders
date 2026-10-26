@@ -15,6 +15,7 @@ import Catalogue from "./pages/Catalogue.jsx";
 import Home from "./pages/portal/Home.jsx";
 import MyOrders from "./pages/portal/MyOrders.jsx";
 import SendOrder from "./pages/portal/SendOrder.jsx";
+import OrderAgain from "./pages/portal/OrderAgain.jsx";
 
 const notFound = <Route path="*" element={<EmptyState title="Page not found"><Link to="/">Back to the start</Link></EmptyState>} />;
 
@@ -48,6 +49,7 @@ export default function App() {
             <Route path="/my/orders" element={<MyOrders />} />
             <Route path="/order/:guid" element={<OrderDetail />} />
             <Route path="/send-order" element={<SendOrder />} />
+            <Route path="/order-again/:guid" element={<OrderAgain />} />
             <Route path="/catalogue" element={<Catalogue />} />
             {notFound}
           </Routes>

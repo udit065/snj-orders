@@ -152,3 +152,23 @@ test("staff upload catalogues and every login can open them", async () => {
   await staff.delete(`/api/catalogue/${c.id}`).expect(200);
   await agarwal.get(`/api/catalogue/${c.id}/file`).expect(404);
 });
+
+test("order again copies a past order's items into the staff queue", async () => {
+  const staff = await signIn("sidharth");
+  const agarwal = await makeAgarwal(staff);
+  const order = (await agarwal.get("/api/order/g-so-1")).body;
+  const sizes = order.items.flatMap((g) => g.sizes);
+  const lines = sizes.map((l) => ({ item: l.item, size: l.size, qty: l.qty + 1 }));
+  await agarwal.post("/api/my/repeat").send({ guid: "g-so-1", lines: [] }).expect(400);
+  const mehta = (await staff.get("/api/orders/sales?q=Mehta")).body.orders[0];
+  await agarwal.post("/api/my/repeat").send({ guid: mehta.guid, lines }).expect(404);
+  const req = (await agarwal.post("/api/my/repeat").send({ guid: "g-so-1", note: "same again",
+    lines: [...lines, { item: "SOMETHING ELSE", size: "", qty: 5 }] }).expect(200)).body;
+  assert.equal(req.kind, "repeat");
+  assert.equal(req.from_order.guid, "g-so-1");
+  assert.deepEqual(req.lines.map((l) => [l.item, l.size, l.qty]), sizes.map((l) => [l.item, l.size, l.qty + 1]));
+  assert.ok(req.lines.every((l) => l.rate > 0 && l.unit));
+  const queue = (await staff.get("/api/photo-orders")).body.photos;
+  assert.deepEqual(queue.map((p) => p.kind), ["repeat"]);
+  await agarwal.get(`/api/photos/${req.id}/image`).expect(404);
+});

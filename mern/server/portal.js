@@ -24,7 +24,8 @@ async function photoViews(photos) {
     // A failed or withdrawn entry goes back to staff, so it shows as received again.
     const order = c && inTally.find((o) => o.number === c.order.order_no && o.party === c.order.party);
     return {
-      id: String(p._id), party: p.party, username: p.username, note: p.note || "", created_at: p.createdAt,
+      id: String(p._id), kind: p.kind || "photo", from_order: p.from_order && p.from_order.guid ? p.from_order : null,
+      lines: p.lines || [], party: p.party, username: p.username, note: p.note || "", created_at: p.createdAt,
       stage, stage_label: PHOTO_STAGE[stage], staff_note: p.staff_note || "",
       order_no: c ? c.order.order_no : "", order_guid: order ? order.guid : "", total: c ? c.total : null,
       history: p.history,
@@ -108,6 +109,31 @@ function routes({ requireLogin, requireStaff }) {
     res.json((await photoViews([p.toObject()]))[0]);
   });
 
+  // Order again: the same items and sizes as a past order (quantities can change), checked by staff like a photo.
+  r.post("/my/repeat", ...distributor, express.json(), async (req, res) => {
+    const { guid, note = "" } = req.body || {};
+    const order = await db.Order.findOne({ guid: String(guid || ""), kind: "sales" }).lean();
+    if (!order || !req.user.parties.includes(order.party)) return res.status(404).json({ detail: "Order not found." });
+    const known = new Map(order.lines.map((l) => [`${l.item}|${l.size}`, l]));
+    const lines = [];
+    for (const l of Array.isArray(req.body.lines) ? req.body.lines : []) {
+      const was = known.get(`${l.item}|${l.size || ""}`);
+      const qty = Number(l.qty);
+      if (!was || !(qty > 0)) continue;  // only items from that order, and only those wanted
+      // SNJ's 50% + 20% chain shows in Tally as an amount of 0.4 x rate x qty.
+      const share = was.rate && was.qty ? Math.abs(was.amount) / (was.rate * was.qty) : 1;
+      lines.push({ item: was.item, size: was.size, qty, unit: was.unit, rate: was.rate,
+                   discount: Math.abs(share - 0.4) < 0.02 ? "50+20" : "none" });
+    }
+    if (!lines.length) return res.status(400).json({ detail: "Enter a quantity for at least one item." });
+    const p = await db.OrderPhoto.create({
+      kind: "repeat", from_order: { guid: order.guid, number: order.number }, lines, party: order.party,
+      username: req.user.username, note: String(note).trim().slice(0, 500),
+      history: [{ at: new Date(), by: req.user.username, status: "received", note: "" }],
+    });
+    res.json((await photoViews([p.toObject()]))[0]);
+  });
+
   r.get("/my/photos", ...distributor, async (req, res) => {
     const photos = await db.OrderPhoto.find(mine(req)).sort({ createdAt: -1 }).limit(50).lean();
     res.json({ photos: await photoViews(photos), parties: req.user.parties });
@@ -117,7 +143,7 @@ function routes({ requireLogin, requireStaff }) {
 
   r.get("/photos/:id/image", requireLogin, async (req, res) => {
     const p = await db.OrderPhoto.findById(req.params.id).lean().catch(() => null);
-    if (!p || !canSee(req, p.party)) return res.status(404).json({ detail: "Photo not found." });
+    if (!p || !p.file_id || !canSee(req, p.party)) return res.status(404).json({ detail: "Photo not found." });
     db.sendFile(res, p.file_id, p.content_type, `order-photo.${p.content_type.split("/")[1]}`);
   });
 

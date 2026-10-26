@@ -16,7 +16,7 @@ export default function PhotoOrders() {
   const [rejecting, setRejecting] = useState(null);  // { id, note }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  useEffect(() => { document.title = "Order photos · SNJ Orders"; }, []);
+  useEffect(() => { document.title = "Order requests · SNJ Orders"; }, []);
 
   const reject = async () => {
     setBusy(true);
@@ -34,7 +34,7 @@ export default function PhotoOrders() {
   return (
     <>
       <TopProgress active={loading} />
-      <PageHeader title="Order photos" subtitle="Order pads distributors photographed. Enter each one as an order, or send it back with a reason." />
+      <PageHeader title="Order requests" subtitle="Order-pad photos and repeat orders from distributors. Enter each one as an order, or send it back with a reason." />
       <Card padded={false}>
         <div className="toolbar toolbar-tabs">
           <SegmentedFilter value={show} onChange={(v) => setParams(v === "open" ? {} : { show: v })} options={[
@@ -45,14 +45,21 @@ export default function PhotoOrders() {
         <Alert onClose={() => setError(null)}>{error || loadError}</Alert>
         {!data ? <div className="card-pad"><Skeleton /></div>
           : !data.photos.length ? <EmptyState title={show === "open" ? "Nothing to enter" : "No photos yet"}>
-              {show === "open" && "New order photos from distributors appear here."}</EmptyState>
+              {show === "open" && "New photos and repeat orders from distributors appear here."}</EmptyState>
             : (
               <div className={`photo-grid ${loading ? "is-loading" : ""}`}>
                 {data.photos.map((p) => (
                   <div key={p.id} className="photo-card">
-                    <a href={`/api/photos/${p.id}/image`} target="_blank" rel="noreferrer" className="photo-img">
-                      <img src={`/api/photos/${p.id}/image`} alt={`Order pad from ${p.party}`} loading="lazy" />
-                    </a>
+                    {p.kind === "repeat" ? (
+                      <div className="repeat-lines">
+                        <div className="strong">↻ Order again of {p.from_order?.number}</div>
+                        <ul>{p.lines.map((l, i) => <li key={i}>{l.item}{l.size && ` · ${l.size}`} <span className="muted">× {l.qty} {l.unit}</span></li>)}</ul>
+                      </div>
+                    ) : (
+                      <a href={`/api/photos/${p.id}/image`} target="_blank" rel="noreferrer" className="photo-img">
+                        <img src={`/api/photos/${p.id}/image`} alt={`Order pad from ${p.party}`} loading="lazy" />
+                      </a>
+                    )}
                     <div className="photo-body">
                       <div className="photo-title"><span className="strong">{p.party}</span>
                         <Badge tone={PHOTO_TONE[p.stage]}>{STAGE[p.stage]}</Badge></div>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { upload } from "../../api.js";
 import { useApi } from "../../hooks/useApi.js";
 import { niceTime } from "../../format.js";
@@ -14,7 +14,8 @@ export default function SendOrder() {
   const [party, setParty] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const [sent, setSent] = useState(false);
+  const [params] = useSearchParams();
+  const [sent, setSent] = useState(params.get("sent") === "1");
   const input = useRef(null);
   useEffect(() => { document.title = "Send an order · SNJ"; }, []);
   useEffect(() => () => preview && URL.revokeObjectURL(preview), [preview]);
@@ -80,21 +81,24 @@ export default function SendOrder() {
           </div>
         )}
       </Card>
-      <Card title="Photos you've sent" padded={false}>
+      <Card title="Your order requests" padded={false}>
         {!data ? <div className="card-pad"><Skeleton /></div>
           : !data.photos.length ? <EmptyState title="None yet" />
             : (
               <ul className="list">
                 {data.photos.map((p) => (
                   <li key={p.id}>
-                    <a href={`/api/photos/${p.id}/image`} target="_blank" rel="noreferrer" className="thumb">
-                      <img src={`/api/photos/${p.id}/image`} alt="Order photo" loading="lazy" />
-                    </a>
+                    {p.kind === "repeat" ? <span className="thumb thumb-icon" aria-hidden="true">↻</span> : (
+                      <a href={`/api/photos/${p.id}/image`} target="_blank" rel="noreferrer" className="thumb">
+                        <img src={`/api/photos/${p.id}/image`} alt="Order photo" loading="lazy" />
+                      </a>
+                    )}
                     <div className="grow">
                       <div className="strong">{niceTime(p.created_at)}</div>
                       <div className="muted small">
                         {p.order_guid ? <>Order <Link to={`/order/${encodeURIComponent(p.order_guid)}`}>{p.order_no}</Link></>
-                          : p.order_no ? `Order ${p.order_no}` : p.note}
+                          : p.order_no ? `Order ${p.order_no}`
+                            : p.kind === "repeat" ? `Order again of ${p.from_order?.number}` : p.note}
                         {p.stage === "rejected" && <span className="late"> {p.staff_note}</span>}
                       </div>
                     </div>

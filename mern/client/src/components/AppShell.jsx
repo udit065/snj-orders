@@ -6,7 +6,7 @@ const STAFF_NAV = [
   { to: "/orders/purchase", label: "Purchase orders" },
   { to: "/new-order", label: "New order" },
   { to: "/entries", label: "Entries" },
-  { to: "/photo-orders", label: "Order photos" },
+  { to: "/photo-orders", label: "Order requests" },
   { to: "/catalogue", label: "Catalogue" },
   { to: "/distributors", label: "Distributors" },
 ];

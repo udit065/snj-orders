@@ -31,7 +31,9 @@ export default function OrderDetail() {
       <PageHeader
         back={<Link className="back" to={listPath(order.kind)}>← All {order.kind} orders</Link>}
         title={<>{order.number} <Badge tone={STATUS_TONE[order.status]}>{order.status_label}</Badge></>}
-        subtitle={`${order.voucher_type} · ${niceDate(order.date)}`} />
+        subtitle={`${order.voucher_type} · ${niceDate(order.date)}`}
+        actions={user?.role === "distributor" && !order.cancelled &&
+          <Link className="btn btn-secondary" to={`/order-again/${encodeURIComponent(order.guid)}`}>↻ Order again</Link>} />
       <div className="stats">
         <div className="stat"><span className="stat-label">{sales ? "Customer" : "Supplier"}</span><span className="stat-value">{order.party}</span></div>
         <div className="stat"><span className="stat-label">Amount</span><span className="stat-value">₹{inr(order.total)}</span></div>

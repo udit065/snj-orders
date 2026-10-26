@@ -59,8 +59,11 @@ const Change = mongoose.model("Change", new Schema({
   history: [{ _id: false, at: Date, by: String, status: String, note: String }],
 }, { timestamps: true }));
 
-// A distributor's photo of their order pad, until staff enter it as an order (a Change).
+// A distributor's order request until staff enter it as an order (a Change): a photo of their
+// order pad, or "order again" of a past order (kind "repeat", with its lines and no photo).
 const OrderPhoto = mongoose.model("OrderPhoto", new Schema({
+  kind: { type: String, default: "photo" }, from_order: { guid: String, number: String },
+  lines: [{ _id: false, item: String, size: String, qty: Number, unit: String, rate: Number, discount: String }],
   party: String, username: String, note: String, file_id: Schema.Types.ObjectId, content_type: String, size: Number,
   status: { type: String, default: "received", index: true },  // received -> entered | rejected
   change_id: Schema.Types.ObjectId, staff_note: String,

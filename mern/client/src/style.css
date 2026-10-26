@@ -259,3 +259,7 @@ input[type="date"] { min-width: 140px; }
   .stat { padding: 10px 12px; }
   .page-actions .btn { width: 100%; }
 }
+.thumb-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 6px; background: var(--brand-soft); color: var(--brand); font-size: 22px; flex: none; }
+.repeat-lines { padding: 12px; background: var(--surface-2); border-bottom: 1px solid var(--line-2); font-size: 13.5px; }
+.repeat-lines ul { margin: 6px 0 0; padding-left: 18px; }
+.qty-input { width: 100px; text-align: right; }

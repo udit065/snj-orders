@@ -60,13 +60,14 @@ export default function Home() {
               </ul>
             )}
           </Card>
-          <Card title="Your order photos" padded={false} actions={<Link to="/send-order">Send one</Link>}>
+          <Card title="Your order requests" padded={false} actions={<Link to="/send-order">Send one</Link>}>
             {!data.photos.length ? <EmptyState title="None sent yet">Write your order on your usual pad and send a photo.</EmptyState> : (
               <ul className="list">
                 {data.photos.map((p) => (
                   <li key={p.id}>
                     <div><div className="strong">{niceTime(p.created_at)}</div>
-                      <div className="muted small">{p.order_no ? `Order ${p.order_no}` : p.note || p.party}</div></div>
+                      <div className="muted small">{p.order_no ? `Order ${p.order_no}`
+                        : p.kind === "repeat" ? `Order again of ${p.from_order?.number}` : p.note || p.party}</div></div>
                     <Badge tone={PHOTO_TONE[p.stage]}>{p.stage_label}</Badge>
                   </li>
                 ))}
