@@ -9,11 +9,17 @@ const lineSchema = new Schema({
   amount: Number, due_date: String, godown: String, order_no: String,
 }, { _id: false });
 
-const Order = mongoose.model("Order", new Schema({
+// status / next_due / items_count are worked out from the deliveries after each sync
+// (orders.js refreshProgress), so lists can filter and page inside MongoDB.
+const orderSchema = new Schema({
   guid: { type: String, unique: true }, kind: String, number: String, date: { type: String, index: true },
   party: String, voucher_type: String, reference: String, narration: String, total: Number,
   optional: Boolean, master_id: String, alter_id: String, cancelled: Boolean, lines: [lineSchema],
-}));
+  status: String, next_due: String, items_count: Number,
+});
+orderSchema.index({ kind: 1, status: 1, date: -1, number: -1 });
+orderSchema.index({ kind: 1, party: 1 });
+const Order = mongoose.model("Order", orderSchema);
 
 const fulfilmentSchema = new Schema({
   kind: String, party: String, order_no: String, item: String, size: String, qty: Number,
@@ -115,8 +121,14 @@ async function getMeta(key) {
 
 // Swap in a fresh copy from Tally. With dates, only that period is replaced (a quick
 // sync, or one month of a full copy); everything is replaced otherwise.
+// Returns the parties whose orders or deliveries changed, so their order status can be worked out again.
 async function replaceAll(orders, fulfilments, syncedAt, from, to) {
   const period = from ? { date: { $gte: from, $lte: to } } : {};
+  const touched = new Set([...orders, ...fulfilments].map((x) => x.party));
+  if (from) {
+    for (const p of await Order.distinct("party", period)) touched.add(p);
+    for (const p of await Fulfilment.distinct("party", period)) touched.add(p);
+  }
   await Order.deleteMany(period);
   await Fulfilment.deleteMany(period);
   if (orders.length) {
@@ -128,6 +140,7 @@ async function replaceAll(orders, fulfilments, syncedAt, from, to) {
   if (fulfilments.length) await Fulfilment.insertMany(fulfilments.map(toFulfilment), { ordered: false });
   await setMeta("synced_at", syncedAt);
   if (!from) await setMeta("full_synced_at", syncedAt);
+  return from ? [...touched] : null;  // null: everything was replaced
 }
 
 // A full copy has arrived month by month; drop whatever lies outside its period.

@@ -5,7 +5,7 @@ const express = require("express");
 const cookieSession = require("cookie-session");
 const db = require("./db");
 const { staffRoutes, bridgeRoutes, bridgeHints } = require("./changes");
-const { STATUS_LABEL, withProgress, statusOf, groupByItem, listOrders } = require("./orders");
+const { STATUS_LABEL, withProgress, statusOf, groupByItem, listOrders, refreshProgress } = require("./orders");
 const portal = require("./portal");
 
 function createApp({ bridgeToken = "", sessionSecret, httpsOnly = false } = {}) {
@@ -89,10 +89,15 @@ function createApp({ bridgeToken = "", sessionSecret, httpsOnly = false } = {}) 
     if (data.start_full) {
       await db.setMeta("full_run", data.run);
     } else if (data.complete) {
-      if (data.run === (await db.getMeta("full_run"))) await db.finishFull(data.from, data.to, data.synced_at);
+      if (data.run === (await db.getMeta("full_run"))) {
+        await db.finishFull(data.from, data.to, data.synced_at);
+        await refreshProgress();
+      }
     } else if (data.orders) {
-      if (data.full === false) await db.replaceAll(data.orders, data.fulfilments, data.synced_at, data.from, data.to);
-      else await db.replaceAll(data.orders, data.fulfilments, data.synced_at);
+      const parties = data.full === false
+        ? await db.replaceAll(data.orders, data.fulfilments, data.synced_at, data.from, data.to)
+        : await db.replaceAll(data.orders, data.fulfilments, data.synced_at);
+      await refreshProgress(parties);
     }
     res.json({ orders: (data.orders || []).length, fulfilments: (data.fulfilments || []).length,
                has_full: await db.hasFull(), run: await db.getMeta("full_run"), ...(await bridgeHints()) });

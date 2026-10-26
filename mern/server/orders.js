@@ -55,7 +55,35 @@ function groupByItem(lines) {
 const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const isDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || "");
 
+// Works out each order's status, next due date and item count from its deliveries and
+// saves them on the order. `parties` limits it to those parties (null: every order).
+async function refreshProgress(parties = null) {
+  const now = Date.now();
+  let count = 0;
+  for (const kind of ["sales", "purchase"]) {
+    const match = { kind, ...(parties ? { party: { $in: parties } } : {}) };
+    const orders = await db.Order.find(match, { guid: 1, kind: 1, party: 1, cancelled: 1, lines: 1 }).lean();
+    if (!orders.length) continue;
+    const progress = await withProgress(orders, match);
+    const writes = orders.map((o) => {
+      const lines = progress.get(o.guid) || [];
+      const dues = lines.filter((l) => l.due_date && l.left > 0).map((l) => l.due_date).sort();
+      return { updateOne: { filter: { guid: o.guid }, update: { $set: {
+        status: o.cancelled ? "cancelled" : statusOf(lines), next_due: dues[0] || "",
+        items_count: new Set(lines.map((l) => l.item)).size,
+      } } } };
+    });
+    for (let i = 0; i < writes.length; i += 1000) await db.Order.bulkWrite(writes.slice(i, i + 1000), { ordered: false });
+    count += orders.length;
+  }
+  return { orders: count, ms: Date.now() - now };
+}
+
+const STATUS_FILTER = { open: { $in: ["pending", "partly"] }, pending: "pending", partly: "partly", done: "done",
+                        cancelled: "cancelled" };
+
 // One page of an order list, with counts by status. `scope` narrows it (a distributor's own parties).
+// Status comes from refreshProgress, so filtering and paging happen inside MongoDB.
 async function listOrders(kind, query, scope = {}) {
   const { q = "", status = "open" } = query;
   let [dateFrom, dateTo] = [query.date_from, query.date_to].map((d) => (isDate(d) ? d : ""));
@@ -75,30 +103,25 @@ async function listOrders(kind, query, scope = {}) {
     if (dateFrom) filter.date.$gte = dateFrom;
     if (dateTo) filter.date.$lte = dateTo;
   }
-  const orders = await db.Order.find(filter).sort({ date: -1, number: -1 }).lean();
-  const progress = await withProgress(orders, { kind, ...scope });
   const counts = { pending: 0, partly: 0, done: 0, cancelled: 0 };
-  const now = today();
-  const rows = [];
-  for (const o of orders) {
-    const lines = progress.get(o.guid) || [];
-    const st = o.cancelled ? "cancelled" : statusOf(lines);
-    counts[st] += 1;
-    const dues = lines.filter((l) => l.due_date && l.left > 0).map((l) => l.due_date).sort();
-    const nextDue = dues[0] || "";
-    if (status === "all" || status === st || (status === "open" && (st === "pending" || st === "partly"))) {
-      rows.push({
-        guid: o.guid, date: o.date, number: o.number, party: o.party, total: o.total, optional: o.optional,
-        items: new Set(lines.map((l) => l.item)).size, next_due: nextDue,
-        overdue: !!(nextDue && nextDue < now && st !== "cancelled"), status: st, status_label: STATUS_LABEL[st],
-      });
-    }
+  for (const c of await db.Order.aggregate([{ $match: filter }, { $group: { _id: "$status", n: { $sum: 1 } } }])) {
+    if (c._id in counts) counts[c._id] = c.n;
   }
-  // Status needs every order's deliveries, so the page is cut after working them out.
-  const pages = Math.max(1, Math.ceil(rows.length / perPage));
+  const shown = status in STATUS_FILTER ? { ...filter, status: STATUS_FILTER[status] } : filter;
+  const total = status === "all" ? Object.values(counts).reduce((a, b) => a + b, 0)
+    : status === "open" ? counts.pending + counts.partly : counts[status] || 0;
+  const pages = Math.max(1, Math.ceil(total / perPage));
   const page = Math.min(pages, Math.max(1, parseInt(query.page, 10) || 1));
-  return { orders: rows.slice((page - 1) * perPage, page * perPage), counts, total: rows.length,
-           page, pages, per_page: perPage, date_from: dateFrom, date_to: dateTo };
+  const orders = await db.Order.find(shown, { lines: 0 }).sort({ date: -1, number: -1 })
+    .skip((page - 1) * perPage).limit(perPage).lean();
+  const now = today();
+  const rows = orders.map((o) => ({
+    guid: o.guid, date: o.date, number: o.number, party: o.party, total: o.total, optional: o.optional,
+    items: o.items_count || 0, next_due: o.next_due || "",
+    overdue: !!(o.next_due && o.next_due < now && o.status !== "cancelled"),
+    status: o.status, status_label: STATUS_LABEL[o.status] || "",
+  }));
+  return { orders: rows, counts, total, page, pages, per_page: perPage, date_from: dateFrom, date_to: dateTo };
 }
 
-module.exports = { STATUS_LABEL, today, withProgress, statusOf, groupByItem, listOrders };
+module.exports = { STATUS_LABEL, today, withProgress, statusOf, groupByItem, listOrders, refreshProgress };

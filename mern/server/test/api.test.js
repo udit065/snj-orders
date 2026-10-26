@@ -142,3 +142,21 @@ test("order lists come a page at a time, and dates are checked", async () => {
   r = (await agent.get("/api/orders/sales?date_from=05-10-2026")).body;
   assert.equal(r.total, 120);
 });
+
+test("an order's status follows deliveries that arrive in a later quick sync", async () => {
+  const order = { guid: "g-old", kind: "sales", number: "SO/OLD", date: "2026-09-01", party: "Old Party",
+    voucher_type: "Sales Order", total: 100,
+    lines: [{ item: "X", size: "", qty: 2, unit: "Doz", rate: 50, amount: 100, due_date: "2026-09-10" }] };
+  await sync({ full: true, orders: [order], fulfilments: [] });
+  const agent = await signIn();
+  const statusOf = async () => (await agent.get("/api/orders/sales?status=all")).body.orders[0].status;
+  assert.equal(await statusOf(), "pending");
+  const sent = { kind: "sales", party: "Old Party", order_no: "SO/OLD", item: "X", size: "", qty: 2,
+                 date: "2026-10-20", voucher: "Bill 1" };
+  // The order is older than the window; its delivery is inside it.
+  await sync({ full: false, from: "2026-10-15", to: "2026-10-25", orders: [], fulfilments: [sent] });
+  assert.equal(await statusOf(), "done");
+  // The bill is cancelled in Tally: the next quick sync no longer has it.
+  await sync({ full: false, from: "2026-10-15", to: "2026-10-25", orders: [], fulfilments: [] });
+  assert.equal(await statusOf(), "pending");
+});

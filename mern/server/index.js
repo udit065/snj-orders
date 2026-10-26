@@ -2,6 +2,7 @@
 const mongoose = require("mongoose");
 const db = require("./db");
 const { createApp } = require("./app");
+const { refreshProgress } = require("./orders");
 
 async function main() {
   const uri = process.env.MONGODB_URI;
@@ -9,6 +10,11 @@ async function main() {
   await mongoose.connect(uri);
   await db.Order.syncIndexes();
   await db.Fulfilment.syncIndexes();
+  // Orders copied before order status was saved on them get it now (once).
+  if (await db.Order.exists({ status: { $exists: false } })) {
+    const r = await refreshProgress();
+    console.log(`Worked out status for ${r.orders} orders in ${r.ms} ms`);
+  }
 
   // STAFF_LOGINS="sidharth:Secret-Pass-1,ramesh:Other-Pass-2" (re-created at every start).
   for (const pair of (process.env.STAFF_LOGINS || "").split(",").map((p) => p.trim()).filter(Boolean)) {
