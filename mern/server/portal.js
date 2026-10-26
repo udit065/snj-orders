@@ -4,6 +4,7 @@ const express = require("express");
 const db = require("./db");
 const { listOrders, withProgress, statusOf, today } = require("./orders");
 const news = require("./news");
+const accounts = require("./accounts");
 
 const round2 = (n) => Math.round(n * 100) / 100;
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -86,7 +87,7 @@ function routes({ requireLogin, requireStaff }) {
       lines_left: coming.length, overdue_lines: coming.filter((c) => c.overdue).length,
       coming_next: coming.slice(0, 8), recent_orders: recent.orders.slice(0, 4),
       photos: await photoViews(photos),
-      posts: await news.currentPosts(3), contact: await news.getContact(),
+      posts: await news.currentPosts(3), contact: await news.getContact(), account: await accounts.homeAccount(req.user.parties),
       new_catalogues: await db.Catalogue.countDocuments({ createdAt: { $gte: new Date(Date.now() - 30 * 864e5) } }),
       ...(await synced()),
     });

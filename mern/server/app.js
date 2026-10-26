@@ -9,6 +9,7 @@ const { STATUS_LABEL, withProgress, statusOf, groupByItem, listOrders, refreshPr
 const portal = require("./portal");
 const notices = require("./notices");
 const news = require("./news");
+const accounts = require("./accounts");
 
 function createApp({ bridgeToken = "", sessionSecret, httpsOnly = false } = {}) {
   const app = express();
@@ -106,9 +107,11 @@ function createApp({ bridgeToken = "", sessionSecret, httpsOnly = false } = {}) 
   });
 
   app.use("/api/bridge", bridgeRoutes({ requireBridge }));
+  app.use("/api/bridge", accounts.bridgeRoutes({ requireBridge }));
   app.use("/api", portal.routes({ requireLogin, requireStaff }));
   app.use("/api", notices.routes({ requireLogin, requireStaff }));
   app.use("/api", news.routes({ requireLogin, requireStaff }));
+  app.use("/api", accounts.routes({ requireLogin, requireStaff }));
   app.use("/api", staffRoutes({ requireLogin, requireStaff }));
 
   app.use("/api", (req, res) => res.status(404).json({ detail: "Page not found." }));

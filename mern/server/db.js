@@ -79,8 +79,36 @@ const Notice = mongoose.model("Notice", new Schema({
   order: { guid: String, number: String }, item: String, qty: Number, problem: String,   // claim
   files: [{ _id: false, file_id: Schema.Types.ObjectId, content_type: String, size: Number }],
   status: { type: String, default: "open", index: true },  // open -> accepted | rejected
-  staff_note: String,
+  staff_note: String, matched_key: String,  // the Tally receipt a payment was found as
   history: [{ _id: false, at: Date, by: String, status: String, note: String }],
+}, { timestamps: true }));
+
+// Accounts from Tally (read only): one entry per voucher and customer. `amount` is
+// positive when it adds to what the customer owes (a bill), negative when it reduces it.
+const acctEntrySchema = new Schema({
+  key: { type: String, unique: true }, guid: String, date: String, number: String, voucher_type: String,
+  base: String, party: String, amount: Number, reference: String, narration: String,
+  bills: [{ _id: false, ref: String, type: { type: String }, amount: Number, credit_days: Number }],
+  ship: { doc_no: String, shipped_by: String, lr_no: String, lr_date: String, vehicle: String, destination: String },
+  lines: [{ _id: false, item: String, size: String, qty: Number, unit: String, rate: Number, amount: Number }],
+});
+acctEntrySchema.index({ party: 1, date: 1 });
+acctEntrySchema.index({ date: 1 });
+const AcctEntry = mongoose.model("AcctEntry", acctEntrySchema);
+
+// Each customer's balance as Tally last reported it (positive = owes SNJ).
+const PartyAccount = mongoose.model("PartyAccount", new Schema({
+  name: { type: String, unique: true }, opening: Number, closing: Number, credit_limit: Number, credit_days: Number,
+}));
+
+// Bills not yet fully paid, from Tally's Bills Receivable report.
+const OpenBill = mongoose.model("OpenBill", new Schema({
+  party: { type: String, index: true }, ref: String, date: String, due_date: String, amount: Number,
+}));
+
+// A distributor saying their balance is right (or not), for the year-end confirmation.
+const BalanceConfirm = mongoose.model("BalanceConfirm", new Schema({
+  party: { type: String, index: true }, username: String, as_of: String, balance: Number, agree: Boolean, note: String,
 }, { timestamps: true }));
 
 // Schemes / offers and news staff post for distributors; an offer can end on a date.
@@ -211,6 +239,6 @@ async function authenticate(username, password) {
 }
 
 module.exports = {
-  Order, Fulfilment, User, Masters, Change, OrderPhoto, Notice, Post, Catalogue, setMeta, getMeta, replaceAll, finishFull, hasFull,
+  Order, Fulfilment, User, Masters, Change, OrderPhoto, Notice, Post, Catalogue, AcctEntry, PartyAccount, OpenBill, BalanceConfirm, setMeta, getMeta, replaceAll, finishFull, hasFull,
   setUser, setDistributor, authenticate, saveFile, sendFile, deleteFile,
 };
