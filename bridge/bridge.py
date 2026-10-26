@@ -195,8 +195,11 @@ def write_orders(cfg):
         log.info("%d new order(s) are waiting; writing is switched off in config.ini", len(changes))
         return
     company = cfg["write_company"]
-    if company not in tally.open_companies(tally.post(cfg["tally_url"], tally.companies_request(), cfg["timeout"])):
-        log.warning("%r is not open in Tally, so %d new order(s) wait", company, len(changes))
+    open_now = tally.open_companies(tally.post(cfg["tally_url"], tally.companies_request(), cfg["timeout"]))
+    if company not in open_now:
+        # Naming what Tally does list makes a spelling difference easy to see.
+        log.warning("%r is not open in Tally, so %d new order(s) wait. Tally lists these companies as open: %s",
+                    company, len(changes), ", ".join(repr(c) for c in open_now) or "none")
         return
     customers, items, ledgers = read_masters(cfg, company)
     customers = {c["name"]: c for c in customers}
