@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useApi } from "../hooks/useApi.js";
+import { useSession } from "../session.jsx";
 import { inr, niceDate, qty } from "../format.js";
 import { Alert, Badge, Card, EmptyState, PageHeader, ProgressBar, Skeleton, STATUS_TONE } from "../components/ui.jsx";
 import DataTable from "../components/DataTable.jsx";
@@ -8,10 +9,12 @@ import DataTable from "../components/DataTable.jsx";
 export default function OrderDetail() {
   const { guid } = useParams();
   const { data, error, loading } = useApi(`/api/order/${encodeURIComponent(guid)}`);
+  const { user } = useSession();
+  const listPath = (kind) => (user?.role === "distributor" ? "/my/orders" : `/orders/${kind}`);
   useEffect(() => { if (data) document.title = `Order ${data.order.number} · SNJ Orders`; }, [data]);
 
   if (error && !data) {
-    return <><Alert>{error}</Alert><Link to="/">← Back to orders</Link></>;
+    return <><Alert>{error}</Alert><Link to={listPath("sales")}>← Back to orders</Link></>;
   }
   if (!data || (loading && data.order.guid !== guid)) {
     return <Card><Skeleton width="40%" height={24} /><p /><Skeleton /><p /><Skeleton width="70%" /></Card>;
@@ -26,7 +29,7 @@ export default function OrderDetail() {
   return (
     <>
       <PageHeader
-        back={<Link className="back" to={`/orders/${order.kind}`}>← All {order.kind} orders</Link>}
+        back={<Link className="back" to={listPath(order.kind)}>← All {order.kind} orders</Link>}
         title={<>{order.number} <Badge tone={STATUS_TONE[order.status]}>{order.status_label}</Badge></>}
         subtitle={`${order.voucher_type} · ${niceDate(order.date)}`} />
       <div className="stats">

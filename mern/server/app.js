@@ -5,59 +5,8 @@ const express = require("express");
 const cookieSession = require("cookie-session");
 const db = require("./db");
 const { staffRoutes, bridgeRoutes, bridgeHints } = require("./changes");
-
-const STATUS_LABEL = { pending: "Pending", partly: "Partly done", done: "Completed", cancelled: "Cancelled" };
-
-// Today in India, as YYYY-MM-DD (the server itself runs on UTC).
-function today() {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-}
-
-const keyOf = (r) => JSON.stringify([r.kind, r.party, r.order_no, r.item, r.size]);
-
-// For each order, its lines with ordered / sent / left quantities.
-async function withProgress(orders, match) {
-  const delivered = new Map();
-  const sums = await db.Fulfilment.aggregate([
-    { $match: match },
-    { $group: { _id: { kind: "$kind", party: "$party", order_no: "$order_no", item: "$item", size: "$size" },
-                qty: { $sum: "$qty" } } },
-  ]);
-  for (const s of sums) delivered.set(keyOf(s._id), s.qty);
-  const out = new Map();
-  // Same item and size on two lines: deliveries fill them in turn.
-  for (const o of [...orders].sort((a, b) => (a.guid < b.guid ? -1 : 1))) {
-    out.set(o.guid, o.lines.map((l) => {
-      const k = keyOf({ ...l, kind: o.kind, party: o.party });
-      const sent = Math.max(0, Math.min(l.qty, delivered.get(k) || 0));
-      delivered.set(k, (delivered.get(k) || 0) - sent);
-      return { ...l, sent, left: Math.round((l.qty - sent) * 1e4) / 1e4 };
-    }));
-  }
-  return out;
-}
-
-function statusOf(lines) {
-  const ordered = lines.reduce((t, l) => t + l.qty, 0);
-  const sent = lines.reduce((t, l) => t + l.sent, 0);
-  if (ordered && sent >= ordered - 1e-9) return "done";
-  return sent > 0 ? "partly" : "pending";
-}
-
-function groupByItem(lines) {
-  const items = new Map();
-  for (const l of lines) {
-    if (!items.has(l.item)) {
-      items.set(l.item, { item: l.item, unit: l.unit, rate: l.rate, qty: 0, sent: 0, left: 0, amount: 0, sizes: [] });
-    }
-    const g = items.get(l.item);
-    for (const k of ["qty", "sent", "left", "amount"]) g[k] = Math.round((g[k] + l[k]) * 1e4) / 1e4;
-    g.sizes.push(l);
-  }
-  return [...items.values()];
-}
-
-const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const { STATUS_LABEL, withProgress, statusOf, groupByItem, listOrders } = require("./orders");
+const portal = require("./portal");
 
 function createApp({ bridgeToken = "", sessionSecret, httpsOnly = false } = {}) {
   const app = express();
@@ -67,7 +16,18 @@ function createApp({ bridgeToken = "", sessionSecret, httpsOnly = false } = {}) 
     maxAge: 12 * 3600 * 1000, secure: httpsOnly, sameSite: "lax", httpOnly: true,
   }));
 
-  const requireLogin = (req, res, next) => (req.session.user ? next() : res.status(401).json({ detail: "Please sign in." }));
+  // Each request re-reads the login, so a switched-off login or changed customers apply at once.
+  const requireLogin = async (req, res, next) => {
+    const u = req.session.user && await db.User.findOne({ username: req.session.user.username, active: true }).lean();
+    if (!u) {
+      req.session = null;
+      return res.status(401).json({ detail: "Please sign in." });
+    }
+    req.user = { username: u.username, name: u.name || u.username, role: u.role || "staff", parties: u.parties || [] };
+    next();
+  };
+  const requireStaff = (req, res, next) => (req.user.role === "staff" ? next()
+    : res.status(403).json({ detail: "This page is for SNJ staff." }));
   const synced = async () => ({ synced_at: await db.getMeta("synced_at") });
   const requireBridge = (req, res, next) => {
     const auth = Buffer.from(req.get("authorization") || "");
@@ -82,8 +42,8 @@ function createApp({ bridgeToken = "", sessionSecret, httpsOnly = false } = {}) 
     const { username = "", password = "" } = req.body || {};
     const user = await db.authenticate(username, password);
     if (!user) return res.status(401).json({ detail: "Wrong username or password." });
-    req.session.user = { username: user.username, name: user.name || user.username };
-    res.json({ user: req.session.user });
+    req.session.user = { username: user.username };
+    res.json({ user: { username: user.username, name: user.name || user.username, role: user.role || "staff" } });
   });
 
   app.post("/api/logout", (req, res) => {
@@ -92,60 +52,20 @@ function createApp({ bridgeToken = "", sessionSecret, httpsOnly = false } = {}) 
   });
 
   app.get("/api/me", requireLogin, async (req, res) => {
-    res.json({ user: req.session.user, ...(await synced()) });
+    res.json({ user: req.user, ...(await synced()) });
   });
 
-  app.get("/api/orders/:kind", requireLogin, async (req, res) => {
+  app.get("/api/orders/:kind", requireLogin, requireStaff, async (req, res) => {
     const { kind } = req.params;
     if (!["sales", "purchase"].includes(kind)) return res.status(404).json({ detail: "Page not found." });
-    const { q = "", status = "open" } = req.query;
-    const isDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || "");
-    let [dateFrom, dateTo] = [req.query.date_from, req.query.date_to].map((d) => (isDate(d) ? d : ""));
-    if (dateFrom && dateTo && dateFrom > dateTo) [dateFrom, dateTo] = [dateTo, dateFrom];
-    const perPage = Math.min(200, Math.max(10, parseInt(req.query.per_page, 10) || 50));
-    const filter = { kind };
-    // Every word must appear somewhere: "niker 38" finds "NIKER S-XL - 38".
-    const words = String(q).split(/\s+/).filter(Boolean);
-    if (words.length) {
-      filter.$and = words.map((w) => {
-        const re = new RegExp(escapeRegex(w), "i");
-        return { $or: [{ party: re }, { number: re }, { reference: re }, { "lines.item": re }] };
-      });
-    }
-    if (dateFrom || dateTo) {
-      filter.date = {};
-      if (dateFrom) filter.date.$gte = dateFrom;
-      if (dateTo) filter.date.$lte = dateTo;
-    }
-    const orders = await db.Order.find(filter).sort({ date: -1, number: -1 }).lean();
-    const progress = await withProgress(orders, { kind });
-    const counts = { pending: 0, partly: 0, done: 0, cancelled: 0 };
-    const now = today();
-    const rows = [];
-    for (const o of orders) {
-      const lines = progress.get(o.guid) || [];
-      const st = o.cancelled ? "cancelled" : statusOf(lines);
-      counts[st] += 1;
-      const dues = lines.filter((l) => l.due_date && l.left > 0).map((l) => l.due_date).sort();
-      const nextDue = dues[0] || "";
-      if (status === "all" || status === st || (status === "open" && (st === "pending" || st === "partly"))) {
-        rows.push({
-          guid: o.guid, date: o.date, number: o.number, party: o.party, total: o.total, optional: o.optional,
-          items: new Set(lines.map((l) => l.item)).size, next_due: nextDue,
-          overdue: !!(nextDue && nextDue < now && st !== "cancelled"), status: st, status_label: STATUS_LABEL[st],
-        });
-      }
-    }
-    // Status needs every order's deliveries, so the page is cut after working them out.
-    const pages = Math.max(1, Math.ceil(rows.length / perPage));
-    const page = Math.min(pages, Math.max(1, parseInt(req.query.page, 10) || 1));
-    res.json({ orders: rows.slice((page - 1) * perPage, page * perPage), counts, total: rows.length,
-               page, pages, per_page: perPage, date_from: dateFrom, date_to: dateTo, ...(await synced()) });
+    res.json({ ...(await listOrders(kind, req.query)), ...(await synced()) });
   });
 
   app.get("/api/order/:guid", requireLogin, async (req, res) => {
     const order = await db.Order.findOne({ guid: req.params.guid }).lean();
-    if (!order) {
+    // A distributor sees only their own sales orders; anything else looks like it doesn't exist.
+    const own = (o) => req.user.role === "staff" || (o.kind === "sales" && req.user.parties.includes(o.party));
+    if (!order || !own(order)) {
       return res.status(404).json({ detail: "This order is no longer in Tally, or is older than the sync window." });
     }
     const lines = (await withProgress([order], { kind: order.kind, party: order.party })).get(order.guid);
@@ -179,7 +99,8 @@ function createApp({ bridgeToken = "", sessionSecret, httpsOnly = false } = {}) 
   });
 
   app.use("/api/bridge", bridgeRoutes({ requireBridge }));
-  app.use("/api", staffRoutes({ requireLogin }));
+  app.use("/api", portal.routes({ requireLogin, requireStaff }));
+  app.use("/api", staffRoutes({ requireLogin, requireStaff }));
 
   app.use("/api", (req, res) => res.status(404).json({ detail: "Page not found." }));
 

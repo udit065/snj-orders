@@ -34,6 +34,18 @@ The bridge only writes when its `config.ini` says `allow_writes = yes`, and only
 `write_company` (a test copy of the company first). See `bridge/writer.py` for the
 safety checks.
 
+## Distributor portal
+
+Distributors sign in with their mobile number and see only their own account: open orders
+and what is still to come size by size (**Home**, **Orders**), photos of their order pad
+(**Send order**) and the **Catalogue**. Staff add their logins under **Distributors**,
+linking each to one or more Tally customers, enter each photo as an order from
+**Order photos** (or send it back with a reason), and upload catalogue PDFs.
+Photos and PDFs are kept in MongoDB's file store (GridFS).
+
+Not built yet: balance, bills, statement and payments (the bridge must first read them
+from Tally), and signing in by a code sent to the phone.
+
 ## Host it for free: MongoDB Atlas + Render
 
 1. **MongoDB Atlas** (cloud.mongodb.com): create a free (M0) cluster. Under *Database Access*

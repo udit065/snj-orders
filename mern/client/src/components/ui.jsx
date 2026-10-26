@@ -103,3 +103,16 @@ export function ProgressBar({ value, max }) {
     </div>
   );
 }
+
+// Where an order-pad photo has got to.
+export const PHOTO_TONE = { received: "warn", entered: "info", done: "ok", rejected: "bad" };
+
+export function Stat({ label, value, tone, children }) {
+  return (
+    <div className="stat">
+      <span className="stat-label">{label}</span>
+      <span className={`stat-value ${tone || ""}`}>{value}</span>
+      {children && <span className="stat-sub">{children}</span>}
+    </div>
+  );
+}

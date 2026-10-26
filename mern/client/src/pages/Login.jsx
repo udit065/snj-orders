@@ -27,9 +27,9 @@ export default function Login({ onSignedIn }) {
     <div className="login-screen">
       <form className="card card-pad login" onSubmit={submit}>
         <div className="brand brand-lg"><span className="brand-mark">SNJ</span><span>Orders</span></div>
-        <p className="muted">Sales and purchase orders from Tally</p>
+        <p className="muted">SNJ staff, and SNJ distributors with their mobile number</p>
         <Alert>{error}</Alert>
-        <Field label="Username"><input name="username" autoComplete="username" required autoFocus /></Field>
+        <Field label="Username or mobile number"><input name="username" autoComplete="username" required autoFocus /></Field>
         <Field label="Password"><input name="password" type="password" autoComplete="current-password" required /></Field>
         <Button type="submit" loading={busy}>Sign in</Button>
       </form>

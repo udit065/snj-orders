@@ -24,9 +24,12 @@ const Fulfilment = mongoose.model("Fulfilment", fulfilmentSchema);
 
 const Meta = mongoose.model("Meta", new Schema({ _id: String, value: String }));
 
+// Staff see everything. A distributor signs in with their mobile number and sees only
+// the Tally customers (parties) linked to their login.
 const User = mongoose.model("User", new Schema({
   username: { type: String, unique: true }, name: String, pw_hash: String, active: { type: Boolean, default: true },
-}));
+  role: { type: String, default: "staff" }, parties: [String], phone: String,
+}, { timestamps: true }));
 
 // What the order form offers, as last sent by the bridge from Tally.
 const Masters = mongoose.model("Masters", new Schema({
@@ -49,6 +52,40 @@ const Change = mongoose.model("Change", new Schema({
   error: String,
   history: [{ _id: false, at: Date, by: String, status: String, note: String }],
 }, { timestamps: true }));
+
+// A distributor's photo of their order pad, until staff enter it as an order (a Change).
+const OrderPhoto = mongoose.model("OrderPhoto", new Schema({
+  party: String, username: String, note: String, file_id: Schema.Types.ObjectId, content_type: String, size: Number,
+  status: { type: String, default: "received", index: true },  // received -> entered | rejected
+  change_id: Schema.Types.ObjectId, staff_note: String,
+  history: [{ _id: false, at: Date, by: String, status: String, note: String }],
+}, { timestamps: true }));
+
+// Catalogue PDFs staff upload for distributors.
+const Catalogue = mongoose.model("Catalogue", new Schema({
+  title: String, file_id: Schema.Types.ObjectId, size: Number, uploaded_by: String,
+}, { timestamps: true }));
+
+// Photos and PDFs live in MongoDB's file store (GridFS), as they can be bigger than a document.
+const bucket = () => new mongoose.mongo.GridFSBucket(mongoose.connection.db, { bucketName: "files" });
+
+function saveFile(buffer, filename, contentType) {
+  return new Promise((resolve, reject) => {
+    const up = bucket().openUploadStream(filename, { metadata: { contentType } });
+    up.on("error", reject).on("finish", () => resolve(up.id));
+    up.end(buffer);
+  });
+}
+
+function sendFile(res, id, contentType, filename) {
+  res.set({ "Content-Type": contentType, "Cache-Control": "private, max-age=86400",
+            "Content-Disposition": `inline; filename="${String(filename).replace(/[^\w. -]/g, "_")}"` });
+  bucket().openDownloadStream(id)
+    .on("error", () => (res.headersSent ? res.end() : res.status(404).json({ detail: "File not found." })))
+    .pipe(res);
+}
+
+const deleteFile = (id) => bucket().delete(id).catch(() => {});
 
 function toOrder(o) {
   return {
@@ -106,7 +143,7 @@ async function hasFull() {
   return (await getMeta("full_synced_at")) !== null;
 }
 
-// --- staff logins: same format as the Python version (pbkdf2-sha256, salt$digest) ---
+// --- logins: same format as the Python version (pbkdf2-sha256, salt$digest) ---
 
 function hashPassword(password, salt = crypto.randomBytes(16)) {
   const digest = crypto.pbkdf2Sync(password, salt, 200000, 32, "sha256");
@@ -122,7 +159,15 @@ function checkPassword(password, stored) {
 
 async function setUser(username, name, password) {
   await User.updateOne({ username: username.toLowerCase() },
-    { name, pw_hash: hashPassword(password), active: true }, { upsert: true });
+    { name, pw_hash: hashPassword(password), active: true, role: "staff" }, { upsert: true });
+}
+
+// A distributor's login: their mobile number, the Tally customers they see, and a password
+// (kept as it was when none is given).
+async function setDistributor({ phone, name, parties, password, active = true }) {
+  const update = { name, parties, phone, active, role: "distributor" };
+  if (password) update.pw_hash = hashPassword(password);
+  await User.updateOne({ username: phone }, update, { upsert: true });
 }
 
 async function authenticate(username, password) {
@@ -131,5 +176,6 @@ async function authenticate(username, password) {
 }
 
 module.exports = {
-  Order, Fulfilment, User, Masters, Change, setMeta, getMeta, replaceAll, finishFull, hasFull, setUser, authenticate,
+  Order, Fulfilment, User, Masters, Change, OrderPhoto, Catalogue, setMeta, getMeta, replaceAll, finishFull, hasFull,
+  setUser, setDistributor, authenticate, saveFile, sendFile, deleteFile,
 };

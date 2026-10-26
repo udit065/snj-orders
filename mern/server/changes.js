@@ -79,9 +79,9 @@ async function move(id, from, status, by, extra = {}) {
   return c;
 }
 
-function staffRoutes({ requireLogin }) {
+function staffRoutes({ requireLogin, requireStaff }) {
   const r = express.Router();
-  r.use(requireLogin);
+  r.use(requireLogin, requireStaff);
 
   r.get("/masters", async (req, res) => {
     const m = await db.Masters.findById("tally").lean();
@@ -91,12 +91,21 @@ function staffRoutes({ requireLogin }) {
 
   r.post("/changes", express.json({ limit: "1mb" }), async (req, res) => {
     const [order, problems] = await checkOrder(req.body || {});
+    // Entered from a distributor's order-pad photo: the photo then follows this order.
+    const photoId = (req.body || {}).photo_id;
+    const photo = photoId && await db.OrderPhoto.findById(photoId).lean().catch(() => null);
+    if (photoId && (!photo || photo.status === "rejected")) problems.push("That order photo is no longer waiting.");
+    if (photo && order && photo.party !== order.party) problems.push(`The photo is from ${photo.party}; pick that customer.`);
     if (problems.length) return res.status(400).json({ detail: problems.join(" "), problems });
-    const by = req.session.user.username;
+    const by = req.user.username;
     const c = await db.Change.create({
       status: "waiting", order, total: orderTotal(order), created_by: by,
       history: [{ at: new Date(), by, status: "waiting", note: "" }],
     });
+    if (photo) {
+      await db.OrderPhoto.updateOne({ _id: photo._id }, { status: "entered", change_id: c._id,
+        $push: { history: { at: new Date(), by, status: "entered", note: order.order_no } } });
+    }
     res.json(view(c.toObject()));
   });
 
@@ -110,7 +119,7 @@ function staffRoutes({ requireLogin }) {
   });
 
   const action = (from, status, allowed) => async (req, res) => {
-    const user = req.session.user;
+    const user = req.user;
     const c = await db.Change.findById(req.params.id).lean().catch(() => null);
     if (!c) return res.status(404).json({ detail: "No such order." });
     if (!allowed(user, c)) return res.status(403).json({ detail: "You can't do that." });

@@ -9,6 +9,14 @@ import OrderList from "./pages/OrderList.jsx";
 import OrderDetail from "./pages/OrderDetail.jsx";
 import NewOrder from "./pages/NewOrder.jsx";
 import Entries from "./pages/Entries.jsx";
+import PhotoOrders from "./pages/PhotoOrders.jsx";
+import Distributors from "./pages/Distributors.jsx";
+import Catalogue from "./pages/Catalogue.jsx";
+import Home from "./pages/portal/Home.jsx";
+import MyOrders from "./pages/portal/MyOrders.jsx";
+import SendOrder from "./pages/portal/SendOrder.jsx";
+
+const notFound = <Route path="*" element={<EmptyState title="Page not found"><Link to="/">Back to the start</Link></EmptyState>} />;
 
 export default function App() {
   const [user, setUser] = useState(undefined);  // undefined: still checking the session
@@ -34,14 +42,28 @@ export default function App() {
   return (
     <SessionContext.Provider value={session}>
       <AppShell user={user} syncedAt={syncedAt} onSignOut={signOut}>
-        <Routes>
-          <Route path="/" element={<Navigate to="/orders/sales" replace />} />
-          <Route path="/orders/:kind" element={<OrderList />} />
-          <Route path="/order/:guid" element={<OrderDetail />} />
-          <Route path="/new-order" element={<NewOrder />} />
-          <Route path="/entries" element={<Entries />} />
-          <Route path="*" element={<EmptyState title="Page not found"><Link to="/">Back to orders</Link></EmptyState>} />
-        </Routes>
+        {user.role === "distributor" ? (
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/my/orders" element={<MyOrders />} />
+            <Route path="/order/:guid" element={<OrderDetail />} />
+            <Route path="/send-order" element={<SendOrder />} />
+            <Route path="/catalogue" element={<Catalogue />} />
+            {notFound}
+          </Routes>
+        ) : (
+          <Routes>
+            <Route path="/" element={<Navigate to="/orders/sales" replace />} />
+            <Route path="/orders/:kind" element={<OrderList />} />
+            <Route path="/order/:guid" element={<OrderDetail />} />
+            <Route path="/new-order" element={<NewOrder />} />
+            <Route path="/entries" element={<Entries />} />
+            <Route path="/photo-orders" element={<PhotoOrders />} />
+            <Route path="/catalogue" element={<Catalogue />} />
+            <Route path="/distributors" element={<Distributors />} />
+            {notFound}
+          </Routes>
+        )}
       </AppShell>
     </SessionContext.Provider>
   );

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api.js";
 import { useApi } from "../hooks/useApi.js";
 import { inr, todayIST } from "../format.js";
@@ -15,6 +15,10 @@ const newLine = (due = "") => ({ item: "", rate: "", discount: "50+20", sizes: [
 
 export default function NewOrder() {
   const { data: masters, error: loadError } = useApi("/api/masters");
+  // Entering a distributor's order-pad photo: show it alongside, for that customer.
+  const [params] = useSearchParams();
+  const photoId = params.get("photo");
+  const { data: photo } = useApi(photoId ? `/api/photo-orders/${photoId}` : null);
   const [head, setHead] = useState({ order_no: "", date: todayIST(), party: "", reference: "", narration: "" });
   const [lines, setLines] = useState([newLine()]);
   const [error, setError] = useState(null);
@@ -26,6 +30,7 @@ export default function NewOrder() {
   const units = useMemo(() => new Map((masters?.items || []).map((i) => [i.name, i.unit])), [masters]);
   const customers = useMemo(() => new Set((masters?.customers || []).map((c) => c.name)), [masters]);
 
+  useEffect(() => { if (photo) setHead((h) => ({ ...h, party: photo.party })); }, [photo]);
   const setLine = (i, change) => setLines(lines.map((l, j) => (j === i ? { ...l, ...change } : l)));
   const setSize = (i, k, change) => setLine(i, { sizes: lines[i].sizes.map((s, j) => (j === k ? { ...s, ...change } : s)) });
   const total = round2(lines.reduce((t, l) => t + lineAmount(l), 0));
@@ -36,8 +41,8 @@ export default function NewOrder() {
     setBusy(true);
     setError(null);
     try {
-      await api("/api/changes", { method: "POST", body: JSON.stringify({ ...head, lines }) });
-      navigate("/entries");
+      await api("/api/changes", { method: "POST", body: JSON.stringify({ ...head, lines, photo_id: photoId || undefined }) });
+      navigate(photoId ? "/photo-orders" : "/entries");
     } catch (err) {
       setError(err.message);
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -58,6 +63,15 @@ export default function NewOrder() {
     <form onSubmit={submit} className="order-form">
       {header}
       <Alert onClose={() => setError(null)}>{error}</Alert>
+      {photo && (
+        <Card title={`Order photo from ${photo.party}`} className="photo-ref">
+          <a href={`/api/photos/${photo.id}/image`} target="_blank" rel="noreferrer">
+            <img src={`/api/photos/${photo.id}/image`} alt="Order pad" />
+          </a>
+          {photo.note && <p className="photo-note">“{photo.note}”</p>}
+          <p className="muted small">Opens full size in a new tab. The distributor sees this order once it is sent.</p>
+        </Card>
+      )}
       <datalist id="customers">{masters.customers.map((c) => <option key={c.name} value={c.name} />)}</datalist>
       <datalist id="items">{masters.items.map((i) => <option key={i.name} value={i.name} />)}</datalist>
 
