@@ -52,6 +52,10 @@ Photos and PDFs are kept in MongoDB's file store (GridFS).
 - **Damage claims**: damaged, short or wrong goods with up to 3 photos, optionally against
   one of their orders. Staff accept it (saying what SNJ will do, e.g. a credit note) or not.
 
+- **News and offers**: staff post schemes (with an optional end date and picture) and news
+  under **News**; distributors see current ones on Home and under **What's new**. The same
+  page sets the SNJ contact (name, phone, WhatsApp, email, hours) shown on their Home.
+
 Not built yet: balance, bills and statement (the bridge must first read them from Tally),
 and signing in by a code sent to the phone.
 

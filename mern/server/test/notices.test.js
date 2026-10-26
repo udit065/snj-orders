@@ -92,3 +92,30 @@ test("a damage claim needs a photo and can name one of their orders", async () =
   // The portal's own /my pages still work beside these.
   await agarwal.get("/api/my/home").expect(200);
 });
+
+test("staff post offers and news; distributors see current ones and SNJ's contact", async () => {
+  const { staff, agarwal } = await agents();
+  await agarwal.post("/api/news").send({ kind: "news", title: "x" }).expect(403);
+  let r = await staff.post("/api/news").send({ kind: "offer", title: "", until: "2000-01-01" }).expect(400);
+  assert.match(r.body.detail, /heading/);
+  assert.match(r.body.detail, /passed/);
+  const offer = (await staff.post("/api/news").send({ kind: "offer", title: "Diwali scheme", body: "5% extra on 100 doz",
+    until: "2999-12-31", photo: PNG }).expect(200)).body;
+  await staff.post("/api/news").send({ kind: "news", title: "New thermal range" }).expect(200);
+  // An offer that has ended disappears for distributors.
+  await db.Post.create({ kind: "offer", title: "Old scheme", until: "2020-01-01" });
+  const seen = (await agarwal.get("/api/news")).body;
+  assert.deepEqual(seen.posts.map((p) => p.title).sort(), ["Diwali scheme", "New thermal range"]);
+  assert.equal(seen.can_post, false);
+  await agarwal.get(`/api/news/${offer.id}/photo`).expect(200).expect("content-type", "image/png");
+  assert.equal((await staff.get("/api/news")).body.posts.length, 3);
+
+  await staff.post("/api/contact").send({ phone: "123" }).expect(400);
+  await agarwal.post("/api/contact").send({ phone: "9876543210" }).expect(403);
+  await staff.post("/api/contact").send({ name: "Rohit (sales)", phone: "+91 98765 43210", whatsapp: "9876543210" }).expect(200);
+  const home = (await agarwal.get("/api/my/home")).body;
+  assert.equal(home.contact.phone, "+91 98765 43210");
+  assert.equal(home.posts.length, 2);
+  await agarwal.delete(`/api/news/${offer.id}`).expect(403);
+  await staff.delete(`/api/news/${offer.id}`).expect(200);
+});

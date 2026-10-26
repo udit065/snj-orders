@@ -19,6 +19,7 @@ import OrderAgain from "./pages/portal/OrderAgain.jsx";
 import Payments from "./pages/portal/Payments.jsx";
 import Claims from "./pages/portal/Claims.jsx";
 import Notices from "./pages/Notices.jsx";
+import News from "./pages/News.jsx";
 
 const notFound = <Route path="*" element={<EmptyState title="Page not found"><Link to="/">Back to the start</Link></EmptyState>} />;
 
@@ -55,6 +56,7 @@ export default function App() {
             <Route path="/order-again/:guid" element={<OrderAgain />} />
             <Route path="/payments" element={<Payments />} />
             <Route path="/claims" element={<Claims />} />
+            <Route path="/news" element={<News />} />
             <Route path="/catalogue" element={<Catalogue />} />
             {notFound}
           </Routes>
@@ -68,6 +70,7 @@ export default function App() {
             <Route path="/photo-orders" element={<PhotoOrders />} />
             <Route path="/payments" element={<Notices />} />
             <Route path="/claims" element={<Notices />} />
+            <Route path="/news" element={<News />} />
             <Route path="/catalogue" element={<Catalogue />} />
             <Route path="/distributors" element={<Distributors />} />
             {notFound}

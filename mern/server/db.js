@@ -83,6 +83,12 @@ const Notice = mongoose.model("Notice", new Schema({
   history: [{ _id: false, at: Date, by: String, status: String, note: String }],
 }, { timestamps: true }));
 
+// Schemes / offers and news staff post for distributors; an offer can end on a date.
+const Post = mongoose.model("Post", new Schema({
+  kind: String, title: String, body: String, until: String, by: String,
+  file_id: Schema.Types.ObjectId, content_type: String,
+}, { timestamps: true }));
+
 // Catalogue PDFs staff upload for distributors.
 const Catalogue = mongoose.model("Catalogue", new Schema({
   title: String, file_id: Schema.Types.ObjectId, size: Number, uploaded_by: String,
@@ -205,6 +211,6 @@ async function authenticate(username, password) {
 }
 
 module.exports = {
-  Order, Fulfilment, User, Masters, Change, OrderPhoto, Notice, Catalogue, setMeta, getMeta, replaceAll, finishFull, hasFull,
+  Order, Fulfilment, User, Masters, Change, OrderPhoto, Notice, Post, Catalogue, setMeta, getMeta, replaceAll, finishFull, hasFull,
   setUser, setDistributor, authenticate, saveFile, sendFile, deleteFile,
 };

@@ -287,3 +287,18 @@ input[type="date"] { min-width: 140px; }
 .quick-link:hover { text-decoration: none; border-color: var(--brand); }
 .quick-link > span:first-child { width: 36px; height: 36px; flex: none; border-radius: 50%; background: var(--brand-soft); color: var(--brand); display: grid; place-items: center; font-weight: 700; }
 @media (max-width: 720px) { .quick-links { grid-template-columns: 1fr; } }
+
+/* News, offers and SNJ contact */
+.post-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; margin-top: 16px; }
+.post { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; }
+.post img { width: 100%; max-height: 220px; object-fit: cover; display: block; background: var(--surface-2); }
+.post-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.post-body h3 { margin: 0; font-size: 16px; }
+.post-meta { display: flex; align-items: center; gap: 8px; }
+.post-text { margin: 0; white-space: pre-line; color: var(--ink-2); }
+.post-strip { display: flex; align-items: flex-start; gap: 12px; overflow-x: auto; margin-bottom: 16px; padding-bottom: 4px; scroll-snap-type: x mandatory; }
+.post-strip .post { flex: 0 0 min(320px, 85%); scroll-snap-align: start; }
+.post-strip .post img { max-height: 140px; }
+.post-strip-more { align-self: center; white-space: nowrap; padding: 0 8px; }
+.contact { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin: 16px 0; }
+.contact-actions { display: flex; flex-wrap: wrap; gap: 8px; }

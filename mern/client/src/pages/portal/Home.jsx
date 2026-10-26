@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useApi } from "../../hooks/useApi.js";
+import Contact from "../../components/Contact.jsx";
+import PostCard from "../../components/PostCard.jsx";
 import { inr, niceDate, niceTime, qty } from "../../format.js";
 import { Alert, Badge, Card, EmptyState, PageHeader, PHOTO_TONE, Skeleton, Stat, STATUS_TONE, TopProgress } from "../../components/ui.jsx";
 
@@ -20,6 +22,12 @@ export default function Home() {
       <TopProgress active={loading} />
       <PageHeader title={`Namaste, ${data.name}`} subtitle={`As of ${niceTime(data.synced_at)}`}
                   actions={<Link to="/send-order" className="btn btn-primary">📷 Photograph your order pad</Link>} />
+      {data.posts.length > 0 && (
+        <div className="post-strip">
+          {data.posts.map((p) => <PostCard key={p.id} post={p} />)}
+          <Link to="/news" className="post-strip-more">All news and offers →</Link>
+        </div>
+      )}
       <div className="stats">
         <Stat label="Open orders" value={data.open_orders}>not yet fully sent</Stat>
         <Stat label="Still to come" value={`₹${inr(data.value_left)}`}>{data.lines_left} item sizes</Stat>
@@ -80,6 +88,7 @@ export default function Home() {
         <Link to="/payments" className="quick-link"><span aria-hidden="true">₹</span><span><b>Tell us you've paid</b><br /><span className="muted small">UPI, bank transfer or cheque</span></span></Link>
         <Link to="/claims" className="quick-link"><span aria-hidden="true">⚠</span><span><b>Report damaged or short goods</b><br /><span className="muted small">with photos</span></span></Link>
       </div>
+      <Contact contact={data.contact} />
       <p className="muted small center">Your balance and bills will appear here soon.</p>
     </>
   );

@@ -9,11 +9,13 @@ const STAFF_NAV = [
   { to: "/photo-orders", label: "Requests" },
   { to: "/payments", label: "Payments" },
   { to: "/claims", label: "Claims" },
+  { to: "/news", label: "News" },
   { to: "/catalogue", label: "Catalogue" },
   { to: "/distributors", label: "Distributors" },
 ];
 const DISTRIBUTOR_NAV = [
   { to: "/", label: "Home", end: true },
+  { to: "/news", label: "What's new" },
   { to: "/my/orders", label: "Orders" },
   { to: "/send-order", label: "Send order" },
   { to: "/payments", label: "Payments" },
