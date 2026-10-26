@@ -5,8 +5,10 @@ import { useSession } from "../session.jsx";
 import { inr, niceDate, qty } from "../format.js";
 import { Alert, Badge, Card, EmptyState, PageHeader, ProgressBar, Skeleton, STATUS_TONE } from "../components/ui.jsx";
 import DataTable from "../components/DataTable.jsx";
+import { useT } from "../i18n.jsx";
 
 export default function OrderDetail() {
+  const t = useT();
   const { guid } = useParams();
   const { data, error, loading } = useApi(`/api/order/${encodeURIComponent(guid)}`);
   const { user } = useSession();
@@ -33,7 +35,7 @@ export default function OrderDetail() {
         title={<>{order.number} <Badge tone={STATUS_TONE[order.status]}>{order.status_label}</Badge></>}
         subtitle={`${order.voucher_type} · ${niceDate(order.date)}`}
         actions={user?.role === "distributor" && !order.cancelled &&
-          <Link className="btn btn-secondary" to={`/order-again/${encodeURIComponent(order.guid)}`}>↻ Order again</Link>} />
+          <Link className="btn btn-secondary" to={`/order-again/${encodeURIComponent(order.guid)}`}>{t("↻ Order again")}</Link>} />
       <div className="stats">
         <div className="stat"><span className="stat-label">{sales ? "Customer" : "Supplier"}</span><span className="stat-value">{order.party}</span></div>
         <div className="stat"><span className="stat-label">Amount</span><span className="stat-value">₹{inr(order.total)}</span></div>

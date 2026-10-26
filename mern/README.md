@@ -56,6 +56,11 @@ Photos and PDFs are kept in MongoDB's file store (GridFS).
   under **News**; distributors see current ones on Home and under **What's new**. The same
   page sets the SNJ contact (name, phone, WhatsApp, email, hours) shown on their Home.
 
+- **Hindi**: distributors switch between English and हिंदी at the top (remembered on that
+  phone). Messages the server sends back (errors) stay in English. Staff screens are English.
+- **Home-screen icon**: on Android choose *Add to Home screen* in Chrome's menu, on iPhone
+  *Share → Add to Home Screen*; it then opens like an app.
+
 Not built yet: balance, bills and statement (the bridge must first read them from Tally),
 and signing in by a code sent to the phone.
 

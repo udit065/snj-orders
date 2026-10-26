@@ -4,8 +4,10 @@ import { api } from "../../api.js";
 import { useApi } from "../../hooks/useApi.js";
 import { niceDate, qty as fmtQty } from "../../format.js";
 import { Alert, Button, Card, Field, PageHeader, Skeleton } from "../../components/ui.jsx";
+import { useT } from "../../i18n.jsx";
 
 export default function OrderAgain() {
+  const t = useT();
   const { guid } = useParams();
   const { data, error: loadError } = useApi(`/api/order/${encodeURIComponent(guid)}`);
   const [qtys, setQtys] = useState(null);
@@ -37,20 +39,20 @@ export default function OrderAgain() {
 
   return (
     <form onSubmit={send}>
-      <PageHeader back={<Link className="back" to={`/order/${encodeURIComponent(guid)}`}>← Order {data.order.number}</Link>}
-                  title="Order again" subtitle={`Same items as ${data.order.number} of ${niceDate(data.order.date)}. Change any quantity, or make it 0 to leave it out.`} />
+      <PageHeader back={<Link className="back" to={`/order/${encodeURIComponent(guid)}`}>{t("← Order {n}", { n: data.order.number })}</Link>}
+                  title={t("Order again")} subtitle={t("Same items as {n} of {d}. Change any quantity, or make it 0 to leave it out.", { n: data.order.number, d: niceDate(data.order.date) })} />
       <Alert onClose={() => setError(null)}>{error}</Alert>
       <Card padded={false}>
         <div className="table-wrap">
           <table className="table">
-            <thead><tr><th>Item</th><th>Size</th><th className="num">Last time</th><th className="num">This time</th></tr></thead>
+            <thead><tr><th>{t("Item")}</th><th>{t("Size")}</th><th className="num">{t("Last time")}</th><th className="num">{t("This time")}</th></tr></thead>
             <tbody>
               {sizes.map((l, i) => (
                 <tr key={l.idx}>
-                  <td data-label="Item">{l.item}</td>
-                  <td data-label="Size">{l.size || "—"}</td>
-                  <td data-label="Last time" className="num">{fmtQty(l.qty)} {l.unit}</td>
-                  <td data-label="This time" className="num">
+                  <td data-label={t("Item")}>{l.item}</td>
+                  <td data-label={t("Size")}>{l.size || "—"}</td>
+                  <td data-label={t("Last time")} className="num">{fmtQty(l.qty)} {l.unit}</td>
+                  <td data-label={t("This time")} className="num">
                     <input className="qty-input" type="number" inputMode="decimal" min="0" step="any" value={qtys[i]}
                            aria-label={`Quantity of ${l.item} ${l.size}`}
                            onChange={(e) => setQtys(qtys.map((q, j) => (j === i ? e.target.value : q)))} />
@@ -62,12 +64,12 @@ export default function OrderAgain() {
         </div>
       </Card>
       <Card>
-        <Field label="Anything to add?" hint="Optional, e.g. urgent, or a different transport">
+        <Field label={t("Anything to add?")} hint={t("Optional, e.g. urgent, or a different transport")}>
           <textarea rows={2} value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} />
         </Field>
         <div className="card-foot">
-          <span className="muted small">SNJ checks it and enters it, like an order photo.</span>
-          <Button type="submit" loading={busy} disabled={!wanted}>Send {wanted} item size{wanted === 1 ? "" : "s"} to SNJ</Button>
+          <span className="muted small">{t("SNJ checks it and enters it, like an order photo.")}</span>
+          <Button type="submit" loading={busy} disabled={!wanted}>{t(wanted === 1 ? "Send {n} item size to SNJ" : "Send {n} item sizes to SNJ", { n: wanted })}</Button>
         </div>
       </Card>
     </form>

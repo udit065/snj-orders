@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { niceTime } from "../format.js";
+import { useLang, useT } from "../i18n.jsx";
 
 const STAFF_NAV = [
   { to: "/orders/sales", label: "Sales" },
@@ -26,24 +27,28 @@ const DISTRIBUTOR_NAV = [
 export default function AppShell({ user, syncedAt, onSignOut, children }) {
   const distributor = user.role === "distributor";
   const nav = distributor ? DISTRIBUTOR_NAV : STAFF_NAV;
+  const t = useT();
+  const { lang, setLang } = useLang();
   return (
     <div className="shell">
       <header className="topbar">
         <div className="topbar-inner">
-          <NavLink to="/" className="brand"><span className="brand-mark">SNJ</span><span>{distributor ? "Distributor" : "Orders"}</span></NavLink>
+          <NavLink to="/" className="brand"><span className="brand-mark">SNJ</span><span>{distributor ? t("Distributor") : "Orders"}</span></NavLink>
           <nav className="nav">
-            {nav.map((n) => <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? "on" : "")}>{n.label}</NavLink>)}
+            {nav.map((n) => <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? "on" : "")}>{t(n.label)}</NavLink>)}
           </nav>
           <div className="user">
             <span className="avatar" aria-hidden="true">{(user.name || "?")[0].toUpperCase()}</span>
             <span className="user-name">{user.name}</span>
-            <button className="link-btn" onClick={onSignOut}>Sign out</button>
+            {distributor && <button className="lang-btn" onClick={() => setLang(lang === "hi" ? "en" : "hi")}
+                                    aria-label="Language / भाषा">{lang === "hi" ? "English" : "हिंदी"}</button>}
+            <button className="link-btn" onClick={onSignOut}>{t("Sign out")}</button>
           </div>
         </div>
       </header>
       <div className="syncbar">
-        <span className="dot" aria-hidden="true" /> Copied from Tally {niceTime(syncedAt)}
-        <span className="muted"> · updates every 10 minutes</span>
+        <span className="dot" aria-hidden="true" /> {t("Copied from Tally")} {syncedAt ? niceTime(syncedAt) : t("never")}
+        <span className="muted"> · {t("updates every 10 minutes")}</span>
       </div>
       <main className="content">{children}</main>
     </div>

@@ -4,8 +4,10 @@ import { useApi } from "../hooks/useApi.js";
 import { niceTime } from "../format.js";
 import { fileSize } from "../photo.js";
 import { Alert, Button, Card, EmptyState, Field, PageHeader, Skeleton } from "../components/ui.jsx";
+import { useT } from "../i18n.jsx";
 
 export default function Catalogue() {
+  const t = useT();
   const { data, error: loadError, reload } = useApi("/api/catalogue");
   const [title, setTitle] = useState("");
   const [file, setFile] = useState(null);
@@ -43,7 +45,7 @@ export default function Catalogue() {
 
   return (
     <>
-      <PageHeader title="Catalogue" subtitle={data?.can_upload ? "PDFs every distributor sees in their portal" : "The latest from SNJ"} />
+      <PageHeader title={t("Catalogue")} subtitle={data?.can_upload ? "PDFs every distributor sees in their portal" : t("The latest from SNJ")} />
       <Alert onClose={() => setError(null)}>{error || loadError}</Alert>
       {data?.can_upload && (
         <Card title="Add a catalogue">
@@ -57,7 +59,7 @@ export default function Catalogue() {
         </Card>
       )}
       {!data ? <Card><Skeleton /></Card>
-        : !data.catalogues.length ? <EmptyState title="No catalogues yet">{data.can_upload ? "Upload the first one above." : "New collections will appear here."}</EmptyState>
+        : !data.catalogues.length ? <EmptyState title={t("No catalogues yet")}>{data.can_upload ? "Upload the first one above." : t("New collections will appear here.")}</EmptyState>
           : (
             <div className="catalogue-grid">
               {data.catalogues.map((c) => (
@@ -68,7 +70,7 @@ export default function Catalogue() {
                     <div className="muted small">{fileSize(c.size)} · added {niceTime(c.created_at)}</div>
                   </div>
                   <div className="catalogue-actions">
-                    <a className="btn btn-secondary btn-sm" href={`/api/catalogue/${c.id}/file`} target="_blank" rel="noreferrer">Open</a>
+                    <a className="btn btn-secondary btn-sm" href={`/api/catalogue/${c.id}/file`} target="_blank" rel="noreferrer">{t("Open")}</a>
                     {data.can_upload && <Button size="sm" variant="ghost" loading={busy === c.id} onClick={() => remove(c)}>Remove</Button>}
                   </div>
                 </div>

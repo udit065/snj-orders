@@ -6,10 +6,12 @@ import Contact from "../components/Contact.jsx";
 import PhotoPicker from "../components/PhotoPicker.jsx";
 import PostCard from "../components/PostCard.jsx";
 import { Alert, Button, Card, EmptyState, Field, PageHeader, Skeleton } from "../components/ui.jsx";
+import { useT } from "../i18n.jsx";
 
 const blank = { kind: "offer", title: "", body: "", until: "" };
 
 export default function News() {
+  const t = useT();
   const { data, error: loadError, reload } = useApi("/api/news");
   const [form, setForm] = useState(blank);
   const [photos, setPhotos] = useState([]);
@@ -56,8 +58,8 @@ export default function News() {
   if (!data) return loadError ? <Alert>{loadError}</Alert> : <Card><Skeleton /></Card>;
   return (
     <>
-      <PageHeader title={data.can_post ? "News and offers" : "What's new"}
-                  subtitle={data.can_post ? "Schemes, offers and news every distributor sees" : "Schemes, offers and news from SNJ"} />
+      <PageHeader title={data.can_post ? "News and offers" : t("What's new")}
+                  subtitle={data.can_post ? "Schemes, offers and news every distributor sees" : t("Schemes, offers and news from SNJ")} />
       <Alert onClose={() => setError(null)}>{error}</Alert>
       {saved && <Alert tone="info" onClose={() => setSaved(null)}>{saved}</Alert>}
       {data.can_post && (
@@ -95,7 +97,7 @@ export default function News() {
         </div>
       )}
       {!data.can_post && <Contact contact={data.contact} />}
-      {!data.posts.length ? <EmptyState title="Nothing yet">{data.can_post ? "Post the first scheme or news above." : "New schemes and news from SNJ will appear here."}</EmptyState> : (
+      {!data.posts.length ? <EmptyState title={t("Nothing yet")}>{data.can_post ? "Post the first scheme or news above." : t("New schemes and news from SNJ will appear here.")}</EmptyState> : (
         <div className="post-grid">
           {data.posts.map((p) => (
             <PostCard key={p.id} post={p}>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { api } from "./api.js";
 import { SessionContext } from "./session.jsx";
+import { LangContext, saveLang, savedLang } from "./i18n.jsx";
 import AppShell from "./components/AppShell.jsx";
 import { EmptyState, Spinner } from "./components/ui.jsx";
 import Login from "./pages/Login.jsx";
@@ -26,6 +27,7 @@ const notFound = <Route path="*" element={<EmptyState title="Page not found"><Li
 export default function App() {
   const [user, setUser] = useState(undefined);  // undefined: still checking the session
   const [syncedAt, setSyncedAt] = useState(null);
+  const [lang, setLangState] = useState(savedLang);
 
   const loadMe = () => api("/api/me").then((d) => { setUser(d.user); setSyncedAt(d.synced_at); }).catch(() => setUser(null));
   useEffect(() => {
@@ -35,6 +37,11 @@ export default function App() {
     return () => window.removeEventListener("snj:signed-out", signedOut);
   }, []);
   const session = useMemo(() => ({ user, setSyncedAt }), [user]);
+  // Hindi is offered to distributors; staff screens stay English.
+  const langValue = useMemo(() => ({
+    lang: user?.role === "distributor" ? lang : "en",
+    setLang: (l) => { saveLang(l); setLangState(l); },
+  }), [user, lang]);
 
   if (user === undefined) return <div className="center-screen"><Spinner label="Starting" /></div>;
   if (!user) return <Login onSignedIn={loadMe} />;  // /api/me also brings the last sync time
@@ -46,6 +53,7 @@ export default function App() {
 
   return (
     <SessionContext.Provider value={session}>
+      <LangContext.Provider value={langValue}>
       <AppShell user={user} syncedAt={syncedAt} onSignOut={signOut}>
         {user.role === "distributor" ? (
           <Routes>
@@ -77,6 +85,7 @@ export default function App() {
           </Routes>
         )}
       </AppShell>
+      </LangContext.Provider>
     </SessionContext.Provider>
   );
 }
