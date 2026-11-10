@@ -318,7 +318,9 @@ def sync_accounts(cfg, state, types, deadline, allow_full=True):
         log.info("No account vouchers for recent days, so they were left unchanged")
 
     first = (dt.date.fromisoformat(cfg["accounts_from"]) if cfg["accounts_from"] else accounts.fy_start(today))
-    if not ac.get("next") and ac.get("last_full", "") < today.isoformat() and dt.datetime.now().hour >= cfg["full_sync_hour"]:
+    never = not ac.get("last_full")
+    if not ac.get("next") and (never or (ac["last_full"] < today.isoformat()
+                                        and dt.datetime.now().hour >= cfg["full_sync_hour"])):
         ac["next"] = first.isoformat()
         log.info("Starting a full copy of accounts from %s, a month at a time", first)
     while allow_full and ac.get("next") and time.monotonic() < deadline:
@@ -372,8 +374,18 @@ def run_round(cfg, minutes=None):
     """Quick sync, then carry the full copy on from where it got to, for up to `minutes`."""
     started = time.monotonic()
     state = load_state(cfg)
+    switched = bool(state) and state.get("company") != cfg["company"]
+    if switched:
+        # Another company: everything on the website is copied again from it, starting now.
+        log.info("Company changed from %s to %s, so orders, customers and accounts are copied again now",
+                 state.get("company") or "(whichever was open)", cfg["company"] or "(whichever is open)")
+        state = {}
+    state["company"] = cfg["company"]
+    save_state(cfg, state)
     types = voucher_types(cfg)
     site = quick_sync(cfg, types)
+    if switched:
+        site["masters_stale"] = True
     for step, needed in ((send_masters, site.get("masters_stale")), (write_orders, site.get("changes_waiting"))):
         if needed:
             try:

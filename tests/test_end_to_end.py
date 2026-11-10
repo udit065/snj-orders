@@ -242,6 +242,21 @@ def test_empty_quick_read_leaves_website_alone(site, client, monkeypatch):
     assert "Agarwal" in client.get("/orders/sales?status=all").text
 
 
+def test_new_company_is_copied_again_at_once(site, client, monkeypatch):
+    import bridge
+    cfg, sent = site
+    masters = []
+    monkeypatch.setattr(bridge, "send_masters", lambda c: masters.append(c["company"]))
+    bridge.run_round(cfg)
+    sent.clear()
+    bridge.run_round({**cfg, "company": "Test"})
+    assert any(m.get("start_full") for m in sent) and sent[-1]["complete"]
+    assert bridge.load_state(cfg)["company"] == "Test" and masters == ["Test"]
+    sent.clear()
+    bridge.run_round({**cfg, "company": "Test"})
+    assert len(sent) == 1  # same company again: only the quick sync
+
+
 def test_staff_logins_from_environment(client):
     assert "Wrong" not in client.post("/login", data={"username": "sidharth", "password": "Long-Pass-1"}).text
     assert "Sidharth" in client.get("/orders/sales").text
