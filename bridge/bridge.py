@@ -382,6 +382,15 @@ def run_round(cfg, minutes=None):
         state = {}
     state["company"] = cfg["company"]
     save_state(cfg, state)
+    if cfg["company"]:
+        asked = time.monotonic()
+        open_now = tally.open_companies(tally.post(cfg["tally_url"], tally.companies_request(), cfg["timeout"]))
+        log.info("Tally answered in %.0f s; companies open: %s", time.monotonic() - asked,
+                 ", ".join(repr(c) for c in open_now) or "none")
+        if cfg["company"] not in open_now:
+            log.warning("%r is not open in Tally, so nothing was read this round. Open: %s", cfg["company"],
+                        ", ".join(repr(c) for c in open_now) or "none")
+            return
     types = voucher_types(cfg)
     site = quick_sync(cfg, types)
     if switched:

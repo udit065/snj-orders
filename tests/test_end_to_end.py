@@ -249,12 +249,19 @@ def test_new_company_is_copied_again_at_once(site, client, monkeypatch):
     monkeypatch.setattr(bridge, "send_masters", lambda c: masters.append(c["company"]))
     bridge.run_round(cfg)
     sent.clear()
-    bridge.run_round({**cfg, "company": "Test"})
+    bridge.run_round({**cfg, "company": "SNJ TEST"})
     assert any(m.get("start_full") for m in sent) and sent[-1]["complete"]
-    assert bridge.load_state(cfg)["company"] == "Test" and masters == ["Test"]
+    assert bridge.load_state(cfg)["company"] == "SNJ TEST" and masters == ["SNJ TEST"]
     sent.clear()
-    bridge.run_round({**cfg, "company": "Test"})
+    bridge.run_round({**cfg, "company": "SNJ TEST"})
     assert len(sent) == 1  # same company again: only the quick sync
+
+
+def test_round_stops_when_the_company_is_not_open(site, caplog):
+    import bridge
+    cfg, sent = site
+    bridge.run_round({**cfg, "company": "Test"})
+    assert sent == [] and "'Test' is not open in Tally" in caplog.text and "SNJ TEST" in caplog.text
 
 
 def test_staff_logins_from_environment(client):
