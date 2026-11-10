@@ -26,7 +26,7 @@ Data lives in MongoDB, so it survives restarts (unlike the free Render disk the 
 Staff enter a sales order under **New order**: customer and items come from Tally's own
 lists (the bridge sends them every 6 hours), with sizes, quantities, due dates, rate and
 discount (SNJ's 50% + 20%, or none). There is no approval step: the bridge writes it into
-Tally once on its next round (every 10 minutes). Until then anyone can withdraw it under
+Tally once on its next round (every 3 minutes). Until then anyone can withdraw it under
 **Entries**, which shows each step and who took it. Customers in Uttar Pradesh get the
 "Sale Local 5%" ledger, others "Sale Central 5%" (from their GSTIN, or their ledger's state).
 

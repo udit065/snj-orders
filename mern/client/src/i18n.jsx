@@ -6,7 +6,7 @@ const HI = {
   // menu and top bar
   "Home": "होम", "What's new": "नया क्या है", "Orders": "ऑर्डर", "Send order": "ऑर्डर भेजें", "Payments": "भुगतान",
   "Damage claims": "खराब माल", "Catalogue": "कैटलॉग", "Sign out": "लॉग आउट", "Distributor": "डिस्ट्रीब्यूटर",
-  "Copied from Tally": "Tally से लिया गया", "updates every 10 minutes": "हर 10 मिनट में अपडेट", "never": "कभी नहीं",
+  "Copied from Tally": "Tally से लिया गया", "updates every few minutes": "हर कुछ मिनट में अपडेट", "never": "कभी नहीं",
   // home
   "Namaste, {name}": "नमस्ते, {name}", "As of {time}": "{time} तक की जानकारी",
   "📷 Photograph your order pad": "📷 ऑर्डर पैड की फ़ोटो भेजें", "Open orders": "खुले ऑर्डर",

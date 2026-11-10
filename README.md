@@ -64,7 +64,7 @@ the same way. The two programs run side by side; this one never writes to Tally.
 5. Once the website is online, put its address and token in `config.ini` and run
    `python bridge.py --once`, then check the website.
 6. Keep it running: double-click `install-task.cmd`. It asks Windows to run
-   `bridge.py --once` every 10 minutes in the background (no window, no admin rights
+   `bridge.py --once` every 3 minutes in the background (no window, no admin rights
    needed), so it carries on when the remote connection drops. What it does goes in
    `bridge.log`. Remove it with `schtasks /delete /tn "SNJ Orders Bridge" /f`.
    It can read Tally only while TallyPrime is open with the company loaded.

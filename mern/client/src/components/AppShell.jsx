@@ -50,7 +50,7 @@ export default function AppShell({ user, syncedAt, onSignOut, children }) {
       </header>
       <div className="syncbar">
         <span className="dot" aria-hidden="true" /> {t("Copied from Tally")} {syncedAt ? niceTime(syncedAt) : t("never")}
-        <span className="muted"> · {t("updates every 10 minutes")}</span>
+        <span className="muted"> · {t("updates every few minutes")}</span>
       </div>
       <main className="content">{children}</main>
     </div>

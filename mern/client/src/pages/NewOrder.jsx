@@ -61,12 +61,12 @@ export default function NewOrder() {
     }
   };
 
-  const header = <PageHeader title="New sales order" subtitle="It goes into Tally within about 10 minutes. Until then you can withdraw it under Entries." />;
+  const header = <PageHeader title="New sales order" subtitle="It goes into Tally within a few minutes. Until then you can withdraw it under Entries." />;
   if (loadError) return <>{header}<Alert>{loadError}</Alert></>;
   if (!masters) return <>{header}<Card><Skeleton height={36} /><p /><Skeleton height={36} width="60%" /></Card></>;
   if (!masters.customers.length) {
     return <>{header}<EmptyState title="Waiting for Tally's lists">
-      The customer and item lists arrive from Tally with the bridge's next round, within about 10 minutes.
+      The customer and item lists arrive from Tally with the bridge's next round, within a few minutes.
     </EmptyState></>;
   }
 
